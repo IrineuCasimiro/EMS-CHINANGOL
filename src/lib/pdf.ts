@@ -3,14 +3,14 @@ import autoTable from 'jspdf-autotable';
 import { supabase } from '@/lib/supabase';
 import { useData } from '@/contexts/DataContext';
 import type { WorkOrder, TravelLog, Inspection, Equipment, WorkOrderLabor, PartsRequisition, PartsRequisitionItem, FuelLevel } from '@/types';
-import { formatDate, WORK_ORDER_STATUS_LABELS, TRAVEL_STATUS_LABELS, INSPECTION_STATUS_LABELS, FUEL_LEVEL_LABELS, EQUIPMENT_STATUS_LABELS } from '@/lib/constants';
+import { formatDate, TRAVEL_STATUS_LABELS, INSPECTION_STATUS_LABELS, FUEL_LEVEL_LABELS, EQUIPMENT_STATUS_LABELS } from '@/lib/constants';
 
 const PAGE_W = 210; // A4 mm
 const PAGE_H = 297;
 const MARGIN = 15;
 const CONTENT_W = PAGE_W - MARGIN * 2;
 
-const BRAND_COLOR: [number, number, number] = [23, 107, 135]; // teal-700
+const BRAND_COLOR: [number, number, number] = [23, 107, 135];
 const DARK_COLOR: [number, number, number] = [30, 41, 59];
 const MUTED_COLOR: [number, number, number] = [100, 116, 139];
 const LIGHT_BG: [number, number, number] = [241, 245, 249];
@@ -49,8 +49,8 @@ function footer(doc: jsPDF) {
     doc.line(MARGIN, PAGE_H - 12, PAGE_W - MARGIN, PAGE_H - 12);
     doc.setFontSize(7);
     doc.setTextColor(...MUTED_COLOR);
-    doc.text(`Generated on ${new Date().toLocaleString('en-GB')}`, MARGIN, PAGE_H - 7);
-    doc.text(`Page ${i} of ${pageCount}`, PAGE_W - MARGIN, PAGE_H - 7, { align: 'right' });
+    doc.text(`Gerado em ${new Date().toLocaleString('pt-PT')}`, MARGIN, PAGE_H - 7);
+    doc.text(`Página ${i} de ${pageCount}`, PAGE_W - MARGIN, PAGE_H - 7, { align: 'right' });
   }
 }
 
@@ -84,7 +84,7 @@ function checkPageBreak(doc: jsPDF, y: number, needed = 20): number {
   return y;
 }
 
-// ============ WORK ORDER PDF (MODELO EXATO DA IMAGEM) ============
+// ============ WORK ORDER PDF (MODELO OFICIAL CHINANGOL / SANY) ============
 export function generateWorkOrderPDF(
   wo: WorkOrder,
   equipment: Equipment | undefined,
@@ -101,7 +101,7 @@ export function generateWorkOrderPDF(
   const contentWidth = PAGE_W - margin * 2; // 190mm
   let y = 10;
 
-  // --- CABEÇALHO ---
+  // --- CABEÇALHO SANY / CHINANGOL ---
   doc.setFont('helvetica', 'bold');
   doc.setFontSize(14);
   doc.setTextColor(0, 0, 0);
@@ -118,11 +118,11 @@ export function generateWorkOrderPDF(
   doc.text('FOLHA DE OBRA / ORDEM DE', PAGE_W - margin, y + 3, { align: 'right' });
   doc.text('SERVIÇO', PAGE_W - margin, y + 7.5, { align: 'right' });
 
-  // Caixa Vermelha do Número da OS
-  const boxWidth = 45;
-  const boxHeight = 7;
+  // Caixa Vermelha com o Número da OS
+  const boxWidth = 48;
+  const boxHeight = 7.5;
   const boxX = PAGE_W - margin - boxWidth;
-  const boxY = y + 10;
+  const boxY = y + 9.5;
 
   doc.setDrawColor(218, 41, 28);
   doc.setLineWidth(0.8);
@@ -131,11 +131,12 @@ export function generateWorkOrderPDF(
   doc.setFont('helvetica', 'bold');
   doc.setFontSize(10);
   doc.setTextColor(218, 41, 28);
-  doc.text(`Nº ${wo.number || 'OS-2026-A001'}`, boxX + boxWidth / 2, boxY + 4.8, { align: 'center' });
+  const woNumber = wo?.number || (wo as any)?.code || 'OS-2026-000';
+  doc.text(`Nº ${woNumber}`, boxX + boxWidth / 2, boxY + 5, { align: 'center' });
 
   y += 20;
 
-  // Função para desenhar as barras pretas com detalhe vermelho
+  // Auxiliar para barras de secção pretas com detalhe vermelho
   const drawSectionHeader = (title: string, currentY: number) => {
     doc.setFillColor(0, 0, 0);
     doc.rect(margin, currentY, contentWidth, 5, 'F');
@@ -154,13 +155,13 @@ export function generateWorkOrderPDF(
   // --- 1. IDENTIFICAÇÃO DO EQUIPAMENTO & CLIENTE ---
   y = drawSectionHeader('1. IDENTIFICAÇÃO DO EQUIPAMENTO & CLIENTE', y);
 
-  const eqCode = equipment ? `${equipment.code || ''} ${equipment.name || ''}`.trim() : '';
-  const eqModel = equipment?.model || '';
-  const serialNo = wo.serial_chassis || equipment?.serial_number || '';
-  const entryDate = formatDate(wo.entry_date) || '';
-  const horometer = wo.hour_km_actual ? `${wo.hour_km_actual}` : equipment?.horometer ? `${equipment.horometer} H` : '';
-  const clientProject = wo.client_project || '';
-  const receptionist = wo.technician_receptionist || '';
+  const eqCode = (wo as any)?.equipment_name || equipment?.name || equipment?.code || '—';
+  const eqModel = equipment?.model || (wo as any)?.model || '—';
+  const serialNo = wo?.serial_chassis || equipment?.serial_number || (wo as any)?.serial_number || '—';
+  const entryDate = formatDate(wo?.entry_date || (wo as any)?.created_at) || '—';
+  const horometer = wo?.hour_km_actual ? `${wo.hour_km_actual}` : equipment?.horometer ? `${equipment.horometer} H` : '—';
+  const clientProject = wo?.client_project || (wo as any)?.client || '—';
+  const receptionist = wo?.technician_receptionist || (wo as any)?.technician || '—';
 
   autoTable(doc, {
     startY: y,
@@ -213,9 +214,16 @@ export function generateWorkOrderPDF(
   doc.setFontSize(7.5);
   doc.setTextColor(0, 0, 0);
 
-  const diagLines = wo.diagnosis_lines || [];
+  // Extrair o texto de diagnóstico (seja array ou descrição única)
+  let rawDiagLines: string[] = [];
+  if (Array.isArray((wo as any)?.diagnosis_lines)) {
+    rawDiagLines = (wo as any).diagnosis_lines.map((l: any) => typeof l === 'string' ? l : l.text || '');
+  } else if (wo?.description) {
+    rawDiagLines = wo.description.split('\n');
+  }
+
   for (let i = 0; i < 6; i++) {
-    const lineText = diagLines[i]?.text || '';
+    const lineText = rawDiagLines[i] || '';
     doc.text(`${i + 1} - ${lineText}`, margin + 2.5, y + 3.8 + i * 3.8);
   }
 
@@ -234,6 +242,7 @@ export function generateWorkOrderPDF(
   doc.setFontSize(7);
   doc.setFont('helvetica', 'normal');
 
+  // Desenhar a checklist de entrada padrão
   doc.text('Nível de Óleo do Motor (OK / Repor)  o', col1X, y + 3.8);
   doc.text('Nível de Óleo Hidráulico (OK / Repor)  o', col1X, y + 7.6);
   doc.text('Líquido de Refrigeração (Radiador)  o', col1X, y + 11.4);
@@ -243,7 +252,7 @@ export function generateWorkOrderPDF(
   doc.text('Sistema Elétrico, Luzes e Faróis  o', col2X, y + 3.8);
   doc.text('Vidros, Espelhos e Cabine do Operador  o', col2X, y + 7.6);
   doc.text('Dispositivos de Segurança / Extintor  o', col2X, y + 11.4);
-  doc.text('Dispositivos de Segurança / Extintor  □', col2X, y + 15.2);
+  doc.text('Ferramentas e Acessórios de Bordo  □', col2X, y + 15.2);
 
   doc.setFont('helvetica', 'bold');
   doc.text('NÍVEL COMBUSTÍVEL: E  ⊔  1/4  ⊔  1/2  ⊔  3/4  ⊔  F  ⊔', col2X, y + 19.0);
@@ -253,11 +262,13 @@ export function generateWorkOrderPDF(
   // --- 4. PEÇAS NECESSÁRIAS / SUBSTITUÍDAS (PART REQUEST) ---
   y = drawSectionHeader('4. PEÇAS NECESSÁRIAS / SUBSTITUÍDAS (PART REQUEST)', y);
 
-  const partsData = (wo.parts_replaced && wo.parts_replaced.length > 0)
-    ? wo.parts_replaced.map((p) => [p.reference || '', p.description || '', p.quantity?.toString() || ''])
-    : requisitionItems.length > 0
-    ? requisitionItems.map((item) => [item.part_number || '', item.description || '', item.quantity_requested?.toString() || ''])
-    : [];
+  let partsData: string[][] = [];
+
+  if (wo?.parts_replaced && Array.isArray(wo.parts_replaced) && wo.parts_replaced.length > 0) {
+    partsData = wo.parts_replaced.map((p) => [p.reference || '', p.description || '', p.quantity?.toString() || '']);
+  } else if (requisitionItems && requisitionItems.length > 0) {
+    partsData = requisitionItems.map((item) => [item.part_number || '', item.description || '', item.quantity_requested?.toString() || '']);
+  }
 
   while (partsData.length < 5) {
     partsData.push(['', '', '']);
@@ -278,7 +289,7 @@ export function generateWorkOrderPDF(
       minCellHeight: 5,
     },
     headStyles: {
-      fillColor: [75, 165, 220], // Azul exato da foto
+      fillColor: [75, 165, 220],
       textColor: [255, 255, 255],
       fontStyle: 'bold',
       halign: 'center',
@@ -288,7 +299,7 @@ export function generateWorkOrderPDF(
       1: { cellWidth: 'auto', halign: 'left' },
       2: { cellWidth: 35, halign: 'center' },
     },
-    head: [['REFERENCIA', 'DESCRIÇÃO DA PEÇA', 'QUANTIDADE']],
+    head: [['REFERÊNCIA', 'DESCRIÇÃO DA PEÇA', 'QUANTIDADE']],
     body: partsData,
   });
 
@@ -305,7 +316,7 @@ export function generateWorkOrderPDF(
   doc.setFontSize(7.5);
   doc.setTextColor(0, 0, 0);
 
-  const obsText = wo.exit_observations || '';
+  const obsText = (wo as any)?.exit_observations || (wo as any)?.notes || '';
   const obsLines = obsText ? obsText.split('\n') : [];
 
   for (let i = 0; i < 5; i++) {
@@ -334,7 +345,7 @@ export function generateWorkOrderPDF(
   doc.setFontSize(7.5);
   doc.setTextColor(0, 0, 0);
 
-  doc.text('MECÂNICO / TECNICO', sig1X + sigWidth / 2, y + 3.5, { align: 'center' });
+  doc.text('MECÂNICO / TÉCNICO', sig1X + sigWidth / 2, y + 3.5, { align: 'center' });
   doc.text('ENGENHEIRO', sig2X + sigWidth / 2, y + 3.5, { align: 'center' });
   doc.text('CLIENTE', sig3X + sigWidth / 2, y + 3.5, { align: 'center' });
 
@@ -348,7 +359,6 @@ export function generateTravelLogPDF(tl: TravelLog, vehicle: Equipment | undefin
 
   let y = 38;
 
-  // Identification
   y = sectionTitle(doc, y, 'Identificação');
   y = infoRow(doc, y, 'Motorista/Driver:', tl.driver_name || '—');
   y = infoRow(doc, y, 'Matrícula/Plate:', tl.license_plate || vehicle?.plate_number || '—');
@@ -357,11 +367,9 @@ export function generateTravelLogPDF(tl: TravelLog, vehicle: Equipment | undefin
   y = infoRow(doc, y, 'Objetivo:', tl.purpose || '—', 35);
   y += 3;
 
-  // Controlo de Saída & Retorno
   y = checkPageBreak(doc, y, 30);
   y = sectionTitle(doc, y, 'Controlo de Saída & Retorno');
 
-  // Two-column layout for dates/times
   const colW = CONTENT_W / 2;
   const leftX = MARGIN;
   const rightX = MARGIN + colW;
@@ -411,14 +419,12 @@ export function generateTravelLogPDF(tl: TravelLog, vehicle: Equipment | undefin
   doc.text(`${distance > 0 ? distance : 0} km`, leftX + 22, y);
   y += 3;
 
-  // Fuel levels
   y = checkPageBreak(doc, y, 15);
   y = sectionTitle(doc, y, 'Nível de Combustível');
   y = infoRow(doc, y, 'Fuel Start:', FUEL_LEVEL_LABELS[tl.fuel_start as FuelLevel] || '—');
   y = infoRow(doc, y, 'Fuel End:', FUEL_LEVEL_LABELS[tl.fuel_end as FuelLevel] || '—');
   y += 3;
 
-  // Entry Checklist
   if (tl.checklist && tl.checklist.length > 0) {
     y = checkPageBreak(doc, y, 30);
     y = sectionTitle(doc, y, 'Checklist de Entrada');
@@ -427,7 +433,7 @@ export function generateTravelLogPDF(tl: TravelLog, vehicle: Equipment | undefin
       y = checkPageBreak(doc, y, 7);
       doc.setFont('helvetica', 'bold');
       doc.setTextColor(item.checked ? 22 : 220, item.checked ? 163 : 38, item.checked ? 74 : 38);
-      doc.text(item.checked ? 'YES' : 'NO', MARGIN, y);
+      doc.text(item.checked ? 'SIM' : 'NÃO', MARGIN, y);
       doc.setFont('helvetica', 'normal');
       doc.setTextColor(...DARK_COLOR);
       doc.text(item.label, MARGIN + 12, y);
@@ -436,7 +442,6 @@ export function generateTravelLogPDF(tl: TravelLog, vehicle: Equipment | undefin
     y += 3;
   }
 
-  // Team & Notes
   y = checkPageBreak(doc, y, 20);
   y = sectionTitle(doc, y, 'Equipa & Notas');
   y = infoRow(doc, y, 'Equipe de Viagem:', tl.travel_team || '—');
@@ -444,11 +449,9 @@ export function generateTravelLogPDF(tl: TravelLog, vehicle: Equipment | undefin
   y = infoRow(doc, y, 'Despacho/Dispatcher:', tl.dispatcher || '—');
   y += 3;
 
-  // Status
   y = infoRow(doc, y, 'Status:', TRAVEL_STATUS_LABELS[tl.status as keyof typeof TRAVEL_STATUS_LABELS] || '—');
   y += 3;
 
-  // Signatures
   y = checkPageBreak(doc, y, 30);
   y += 10;
   doc.setDrawColor(...BORDER_COLOR);
@@ -457,8 +460,8 @@ export function generateTravelLogPDF(tl: TravelLog, vehicle: Equipment | undefin
   doc.line(PAGE_W - MARGIN - 80, y, PAGE_W - MARGIN - 5, y);
   doc.setFontSize(8);
   doc.setTextColor(...MUTED_COLOR);
-  doc.text('Driver Signature', MARGIN + 5, y + 5);
-  doc.text('Authorized By', PAGE_W - MARGIN - 80, y + 5);
+  doc.text('Assinatura do Motorista', MARGIN + 5, y + 5);
+  doc.text('Autorizado por', PAGE_W - MARGIN - 80, y + 5);
 
   footer(doc);
   return doc;
@@ -467,26 +470,25 @@ export function generateTravelLogPDF(tl: TravelLog, vehicle: Equipment | undefin
 // ============ INSPECTION PDF ============
 export function generateInspectionPDF(insp: Inspection, equipment: Equipment | undefined): jsPDF {
   const doc = new jsPDF();
-  header(doc, 'Inspection Report', `Weekly Checklist - ${insp.type}`, `INS-${insp.inspection_date}`);
+  header(doc, 'Relatório de Inspeção', `Checklist Semanal - ${insp.type}`, `INS-${insp.inspection_date}`);
 
   let y = 38;
 
-  y = sectionTitle(doc, y, 'Equipment Information');
-  y = infoRow(doc, y, 'Equipment:', equipment?.name || '—');
-  y = infoRow(doc, y, 'Serial Number:', equipment?.serial_number || '—');
-  y = infoRow(doc, y, 'Location:', equipment?.location || '—');
+  y = sectionTitle(doc, y, 'Informação do Equipamento');
+  y = infoRow(doc, y, 'Equipamento:', equipment?.name || '—');
+  y = infoRow(doc, y, 'Número de Série:', equipment?.serial_number || '—');
+  y = infoRow(doc, y, 'Localização:', equipment?.location || '—');
   y = infoRow(doc, y, 'Status:', equipment ? EQUIPMENT_STATUS_LABELS[equipment.status] : '—');
   y += 3;
 
-  y = sectionTitle(doc, y, 'Inspection Details');
-  y = infoRow(doc, y, 'Date:', formatDate(insp.inspection_date));
-  y = infoRow(doc, y, 'Type:', insp.type.replace(/_/g, ' '));
-  y = infoRow(doc, y, 'Inspector:', insp.inspector_name || '—');
-  y = infoRow(doc, y, 'Result:', INSPECTION_STATUS_LABELS[insp.status]);
+  y = sectionTitle(doc, y, 'Detalhes da Inspeção');
+  y = infoRow(doc, y, 'Data:', formatDate(insp.inspection_date));
+  y = infoRow(doc, y, 'Tipo:', insp.type.replace(/_/g, ' '));
+  y = infoRow(doc, y, 'Inspetor:', insp.inspector_name || '—');
+  y = infoRow(doc, y, 'Resultado:', INSPECTION_STATUS_LABELS[insp.status]);
   y += 3;
 
-  // Checklist table
-  y = sectionTitle(doc, y, 'Checklist Items');
+  y = sectionTitle(doc, y, 'Itens Verificados');
   doc.setFillColor(...LIGHT_BG);
   doc.rect(MARGIN, y - 4, CONTENT_W, 7, 'F');
   doc.setFont('helvetica', 'bold');
@@ -494,29 +496,31 @@ export function generateInspectionPDF(insp: Inspection, equipment: Equipment | u
   doc.setTextColor(...DARK_COLOR);
   doc.text('Item', MARGIN + 2, y + 0.5);
   doc.text('OK', MARGIN + 140, y + 0.5);
-  doc.text('Notes', MARGIN + 155, y + 0.5);
+  doc.text('Notas', MARGIN + 155, y + 0.5);
   y += 6;
   doc.setFont('helvetica', 'normal');
 
-  insp.checklist.forEach((item) => {
-    y = checkPageBreak(doc, y, 10);
-    doc.setTextColor(...DARK_COLOR);
-    const labelLines = doc.splitTextToSize(item.label, 130);
-    doc.text(labelLines, MARGIN + 2, y);
-    doc.setTextColor(item.checked ? 22 : 220, item.checked ? 163 : 38, item.checked ? 74 : 38);
-    doc.setFont('helvetica', 'bold');
-    doc.text(item.checked ? 'YES' : 'NO', MARGIN + 140, y);
-    doc.setFont('helvetica', 'normal');
-    doc.setTextColor(...DARK_COLOR);
-    const noteLines = doc.splitTextToSize(item.note || '', 45);
-    doc.text(noteLines, MARGIN + 155, y);
-    y += Math.max(5, labelLines.length * 4, noteLines.length * 4) + 1;
-  });
+  if (insp.checklist && Array.isArray(insp.checklist)) {
+    insp.checklist.forEach((item) => {
+      y = checkPageBreak(doc, y, 10);
+      doc.setTextColor(...DARK_COLOR);
+      const labelLines = doc.splitTextToSize(item.label, 130);
+      doc.text(labelLines, MARGIN + 2, y);
+      doc.setTextColor(item.checked ? 22 : 220, item.checked ? 163 : 38, item.checked ? 74 : 38);
+      doc.setFont('helvetica', 'bold');
+      doc.text(item.checked ? 'SIM' : 'NÃO', MARGIN + 140, y);
+      doc.setFont('helvetica', 'normal');
+      doc.setTextColor(...DARK_COLOR);
+      const noteLines = doc.splitTextToSize(item.note || '', 45);
+      doc.text(noteLines, MARGIN + 155, y);
+      y += Math.max(5, labelLines.length * 4, noteLines.length * 4) + 1;
+    });
+  }
 
   y += 5;
   y = checkPageBreak(doc, y, 20);
-  y = sectionTitle(doc, y, 'General Notes');
-  y = infoRow(doc, y, 'Notes:', insp.notes || '—', 25);
+  y = sectionTitle(doc, y, 'Notas Gerais');
+  y = infoRow(doc, y, 'Notas:', insp.notes || '—', 25);
   y += 5;
 
   if (insp.signature) {
@@ -524,7 +528,7 @@ export function generateInspectionPDF(insp: Inspection, equipment: Equipment | u
     doc.setFont('helvetica', 'bold');
     doc.setFontSize(9);
     doc.setTextColor(...MUTED_COLOR);
-    doc.text('Digital Sign-off:', MARGIN, y);
+    doc.text('Assinatura Digital:', MARGIN, y);
     doc.setFont('helvetica', 'italic');
     doc.setTextColor(...DARK_COLOR);
     doc.text(insp.signature, MARGIN + 35, y);
@@ -539,8 +543,8 @@ export function generateInspectionPDF(insp: Inspection, equipment: Equipment | u
   doc.line(PAGE_W - MARGIN - 80, y, PAGE_W - MARGIN - 5, y);
   doc.setFontSize(8);
   doc.setTextColor(...MUTED_COLOR);
-  doc.text('Inspector Signature', MARGIN + 5, y + 5);
-  doc.text('Supervisor Approval', PAGE_W - MARGIN - 80, y + 5);
+  doc.text('Assinatura do Inspetor', MARGIN + 5, y + 5);
+  doc.text('Aprovação do Supervisor', PAGE_W - MARGIN - 80, y + 5);
 
   footer(doc);
   return doc;
@@ -558,7 +562,6 @@ export function generateRequisitionPDF(
   const MARGIN_L = 12;
   const CONTENT_W_R = PAGE_W - MARGIN_L - MARGIN_R;
 
-  // ---- Header band ----
   doc.setFillColor(15, 30, 50);
   doc.rect(0, 0, PAGE_W, 32, 'F');
 
@@ -570,7 +573,6 @@ export function generateRequisitionPDF(
   doc.setFont('helvetica', 'normal');
   doc.text('SANY DEPARTMENT', MARGIN_L, 18);
 
-  // Number box (right)
   doc.setDrawColor(255, 255, 255);
   doc.setLineWidth(0.4);
   doc.rect(PAGE_W - MARGIN_R - 50, 6, 50, 14, 'S');
@@ -581,17 +583,15 @@ export function generateRequisitionPDF(
   doc.setFontSize(11);
   doc.text(req.number || 'TT-2026-______', PAGE_W - MARGIN_R - 38, 14);
 
-  // Title bar
   doc.setFillColor(199, 89, 48);
   doc.rect(0, 32, PAGE_W, 10, 'F');
   doc.setTextColor(255, 255, 255);
   doc.setFont('helvetica', 'bold');
   doc.setFontSize(12);
-  doc.text('PARTS & SERVICE REQUEST FORM', PAGE_W / 2, 39, { align: 'center' });
+  doc.text('REQUISIÇÃO DE PEÇAS E SERVIÇOS', PAGE_W / 2, 39, { align: 'center' });
 
   let y = 52;
 
-  // ---- Top field grid (two columns) ----
   doc.setFontSize(9);
   doc.setTextColor(30, 41, 59);
   const colL = MARGIN_L;
@@ -612,51 +612,34 @@ export function generateRequisitionPDF(
 
   const lineH = 14;
 
-  // Row 1
-  fieldRow('CLIENT', req.client || '', colL, y, PAGE_W / 2 - MARGIN_L - 4);
-  fieldRow('MODEL', req.model || '', colR, y, PAGE_W / 2 - MARGIN_R - 4);
+  fieldRow('CLIENTE', req.client || '', colL, y, PAGE_W / 2 - MARGIN_L - 4);
+  fieldRow('MODELO', req.model || '', colR, y, PAGE_W / 2 - MARGIN_R - 4);
   y += lineH;
 
-  // Row 2
-  fieldRow('DATE', formatDate(req.created_at), colL, y, PAGE_W / 2 - MARGIN_L - 4);
-  fieldRow('O SUPERVISOR', req.supervisor_name || '', colR, y, PAGE_W / 2 - MARGIN_R - 4);
+  fieldRow('DATA', formatDate(req.created_at), colL, y, PAGE_W / 2 - MARGIN_L - 4);
+  fieldRow('SUPERVISOR', req.supervisor_name || '', colR, y, PAGE_W / 2 - MARGIN_R - 4);
   y += lineH;
 
-  // Row 3
-  fieldRow('SERV. Nº', req.service_number || '', colL, y, PAGE_W / 2 - MARGIN_L - 4);
-  fieldRow('SERIAL Nº', req.serial_number || '', colR, y, PAGE_W / 2 - MARGIN_R - 4);
+  fieldRow('Nº SERVIÇO', req.service_number || '', colL, y, PAGE_W / 2 - MARGIN_L - 4);
+  fieldRow('Nº SÉRIE', req.serial_number || '', colR, y, PAGE_W / 2 - MARGIN_R - 4);
   y += lineH;
 
-  // Row 4
-  fieldRow('REQUESTED BY', req.requested_by || '', colL, y, PAGE_W / 2 - MARGIN_L - 4);
-  fieldRow('SIGN', req.supervisor_sign || '', colR, y, PAGE_W / 2 - MARGIN_R - 4);
+  fieldRow('SOLICITADO POR', req.requested_by || '', colL, y, PAGE_W / 2 - MARGIN_L - 4);
+  fieldRow('ASSINATURA', req.supervisor_sign || '', colR, y, PAGE_W / 2 - MARGIN_R - 4);
   y += lineH;
 
-  // Row 5
-  fieldRow('HOUR/KM METER', req.hour_km_meter || '', colL, y, PAGE_W / 2 - MARGIN_L - 4);
+  fieldRow('HORÍMETRO / KM', req.hour_km_meter || '', colL, y, PAGE_W / 2 - MARGIN_L - 4);
   doc.setFont('helvetica', 'bold');
   doc.setFontSize(8);
   doc.setTextColor(100, 116, 139);
-  doc.text('URGENCY:', colR, y - 2);
+  doc.text('URGÊNCIA:', colR, y - 2);
   doc.setFont('helvetica', 'normal');
   doc.setFontSize(10);
   doc.setTextColor(req.urgency ? 220 : 100, req.urgency ? 38 : 116, req.urgency ? 38 : 139);
   doc.setFont('helvetica', 'bold');
-  doc.text(req.urgency ? 'YES' : 'NO', colR + 22, y);
-  doc.setFont('helvetica', 'normal');
-  doc.setDrawColor(30, 41, 59);
-  doc.setLineWidth(0.4);
-  doc.rect(colR + 32, y - 4, 4, 4, 'S');
-  if (req.urgency) {
-    doc.setFillColor(220, 38, 38);
-    doc.rect(colR + 32.5, y - 3.5, 3, 3, 'F');
-  }
-  doc.setFontSize(8);
-  doc.setTextColor(100, 116, 139);
-  doc.text('(yes/no)', colR + 38, y);
+  doc.text(req.urgency ? 'SIM' : 'NÃO', colR + 22, y);
   y += lineH;
 
-  // ---- Items table header ----
   y += 4;
   doc.setFillColor(15, 30, 50);
   doc.rect(MARGIN_L, y, CONTENT_W_R, 8, 'F');
@@ -664,9 +647,9 @@ export function generateRequisitionPDF(
   doc.setFont('helvetica', 'bold');
   doc.setFontSize(8);
   doc.text('ITEM Nº', MARGIN_L + 2, y + 5.5);
-  doc.text('QUANT.', MARGIN_L + 25, y + 5.5);
-  doc.text('PARTS ID', MARGIN_L + 50, y + 5.5);
-  doc.text('DESCRIPTION', MARGIN_L + 100, y + 5.5);
+  doc.text('QTD.', MARGIN_L + 25, y + 5.5);
+  doc.text('CÓDIGO PEÇA', MARGIN_L + 50, y + 5.5);
+  doc.text('DESCRIÇÃO DA PEÇA', MARGIN_L + 100, y + 5.5);
   y += 8;
 
   const colItemNo = MARGIN_L + 2;
@@ -679,28 +662,12 @@ export function generateRequisitionPDF(
   doc.setFontSize(8);
   doc.setTextColor(30, 41, 59);
 
-  const maxRows = 25;
+  const maxRows = 20;
   for (let i = 0; i < maxRows; i++) {
-    const item = items[i];
+    const item = items ? items[i] : undefined;
     const rowY = y + i * rowH;
 
-    if (rowY > PAGE_H - 40) {
-      doc.addPage();
-      y = 20;
-      doc.setFillColor(15, 30, 50);
-      doc.rect(MARGIN_L, y, CONTENT_W_R, 8, 'F');
-      doc.setTextColor(255, 255, 255);
-      doc.setFont('helvetica', 'bold');
-      doc.setFontSize(8);
-      doc.text('ITEM Nº', colItemNo, y + 5.5);
-      doc.text('QUANT.', colQuant, y + 5.5);
-      doc.text('PARTS ID', colPartsId, y + 5.5);
-      doc.text('DESCRIPTION', colDesc, y + 5.5);
-      y += 8;
-      doc.setFont('helvetica', 'normal');
-      doc.setTextColor(30, 41, 59);
-      continue;
-    }
+    if (rowY > PAGE_H - 40) break;
 
     if (i % 2 === 0) {
       doc.setFillColor(248, 250, 252);
@@ -710,9 +677,6 @@ export function generateRequisitionPDF(
     doc.setDrawColor(226, 232, 240);
     doc.setLineWidth(0.2);
     doc.line(MARGIN_L, rowY + rowH, MARGIN_L + CONTENT_W_R, rowY + rowH);
-    doc.line(MARGIN_L + 22, rowY, MARGIN_L + 22, rowY + rowH);
-    doc.line(MARGIN_L + 45, rowY, MARGIN_L + 45, rowY + rowH);
-    doc.line(MARGIN_L + 95, rowY, MARGIN_L + 95, rowY + rowH);
 
     doc.setFont('helvetica', 'bold');
     doc.setFontSize(8);
@@ -722,7 +686,7 @@ export function generateRequisitionPDF(
     if (item) {
       doc.setFont('helvetica', 'normal');
       doc.setTextColor(30, 41, 59);
-      doc.text(String(item.quantity || ''), colQuant + 1, rowY + 5);
+      doc.text(String(item.quantity_requested || item.quantity || ''), colQuant + 1, rowY + 5);
       doc.text(item.part_number || '', colPartsId + 1, rowY + 5);
       const descLines = doc.splitTextToSize(item.description || '', CONTENT_W_R - 100 - 4);
       doc.text(descLines[0] || '', colDesc + 1, rowY + 5);
@@ -731,12 +695,11 @@ export function generateRequisitionPDF(
 
   y += maxRows * rowH + 6;
 
-  // ---- Notes ----
   if (y < PAGE_H - 30 && req.notes) {
     doc.setFont('helvetica', 'bold');
     doc.setFontSize(8);
     doc.setTextColor(100, 116, 139);
-    doc.text('NOTES:', MARGIN_L, y);
+    doc.text('NOTAS:', MARGIN_L, y);
     doc.setFont('helvetica', 'normal');
     doc.setFontSize(9);
     doc.setTextColor(30, 41, 59);
@@ -745,7 +708,6 @@ export function generateRequisitionPDF(
     y += noteLines.length * 5 + 6;
   }
 
-  // ---- Footer signature area ----
   y = Math.max(y, PAGE_H - 35);
   doc.setDrawColor(203, 213, 225);
   doc.setLineWidth(0.3);
@@ -753,22 +715,10 @@ export function generateRequisitionPDF(
   doc.line(PAGE_W - MARGIN_R - 75, y, PAGE_W - MARGIN_R - 5, y);
   doc.setFontSize(7);
   doc.setTextColor(100, 116, 139);
-  doc.text('Requested By', MARGIN_L + 5, y + 4);
-  doc.text('Supervisor Approval', PAGE_W - MARGIN_R - 75, y + 4);
+  doc.text('Solicitado Por', MARGIN_L + 5, y + 4);
+  doc.text('Aprovação do Supervisor', PAGE_W - MARGIN_R - 75, y + 4);
 
-  // page footer
-  const pageCount = doc.getNumberOfPages();
-  for (let i = 1; i <= pageCount; i++) {
-    doc.setPage(i);
-    doc.setDrawColor(203, 213, 225);
-    doc.setLineWidth(0.2);
-    doc.line(MARGIN_L, PAGE_H - 8, PAGE_W - MARGIN_R, PAGE_H - 8);
-    doc.setFontSize(7);
-    doc.setTextColor(100, 116, 139);
-    doc.text(`CHINANGOL, LDA — SANY Department | Generated ${new Date().toLocaleString('en-GB')}`, MARGIN_L, PAGE_H - 4);
-    doc.text(`Page ${i} of ${pageCount}`, PAGE_W - MARGIN_R, PAGE_H - 4, { align: 'right' });
-  }
-
+  footer(doc);
   return doc;
 }
 
@@ -796,7 +746,7 @@ export async function uploadPDFToStorage(
     if (error) return { error: error.message, path: null };
     return { error: null, path: filePath };
   } catch (err) {
-    return { error: err instanceof Error ? err.message : 'Upload failed', path: null };
+    return { error: err instanceof Error ? err.message : 'Upload falhou', path: null };
   }
 }
 
@@ -805,7 +755,6 @@ export async function getDocumentUrl(path: string): Promise<string | null> {
   return data?.signedUrl || null;
 }
 
-// Hook to generate and optionally save PDFs
 export function usePdfGenerator() {
   const { saveDocument } = useData();
 
