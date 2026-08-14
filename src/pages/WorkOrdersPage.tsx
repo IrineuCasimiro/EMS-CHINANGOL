@@ -1,4 +1,6 @@
 import { useState, useMemo } from 'react';
+import jsPDF from 'jspdf';
+import autoTable from 'jspdf-autotable';
 import { useData } from '@/contexts/DataContext';
 import { useAuth } from '@/contexts/AuthContext';
 import { PageHeader, StatusBadge, EmptyState } from '@/components/shared';
@@ -11,125 +13,303 @@ import { Textarea } from '@/components/ui/textarea';
 import { Card, CardContent } from '@/components/ui/card';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import { Checkbox } from '@/components/ui/checkbox';
-import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import {
   Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter, DialogDescription,
 } from '@/components/ui/dialog';
 import {
   Select, SelectContent, SelectItem, SelectTrigger, SelectValue,
 } from '@/components/ui/select';
-import { Wrench, Plus, Pencil, Trash2, Eye, Printer, Loader2, CheckCircle2 } from 'lucide-react';
-import {
-  WORK_ORDER_STATUS_LABELS, PRIORITY_LABELS, PRIORITY_COLORS, generateNumber,
-} from '@/lib/constants';
-import { generateWorkOrderPDF, previewPDF, downloadPDF } from '@/lib/pdf';
-import type { WorkOrder, WorkOrderType, WorkOrderStatus, Priority, ChecklistItem, DiagnosisLine, WorkOrderPart } from '@/types';
+import { Wrench, Plus, Pencil, Trash2, ChevronRight, X, Eye, Printer, Loader2, FileText } from 'lucide-react';
+import { WORK_ORDER_STATUS_LABELS, formatDate, generateNumber } from '@/lib/constants';
+import { previewPDF, downloadPDF, usePdfGenerator } from '@/lib/pdf';
+import type { WorkOrder, WorkOrderStatus, Equipment, PartsRequisitionItem } from '@/types';
 import { useToast } from '@/hooks/use-toast';
-import { cn } from '@/lib/utils';
-import { supabase } from '@/lib/supabase';
 
-const TYPES: { value: WorkOrderType; label: string }[] = [
-  { value: 'mechanical', label: 'Mechanical' },
-  { value: 'hydraulic', label: 'Hydraulic' },
-  { value: 'electromechanical', label: 'Electromechanical' },
-  { value: 'preventive', label: 'Preventive' },
-  { value: 'corrective', label: 'Corrective' },
-  { value: 'other', label: 'Other' },
-];
+// --- GERADOR EXATO DO MODELO PDF DE WORK ORDER ---
+export const generateWorkOrderPDF = (
+  wo: WorkOrder,
+  equipment?: Equipment,
+  _labor: any[] = [],
+  requisitionItems: PartsRequisitionItem[] = []
+): jsPDF => {
+  const doc = new jsPDF({
+    orientation: 'portrait',
+    unit: 'mm',
+    format: 'a4',
+  });
 
+  const pageWidth = doc.internal.pageSize.getWidth(); // 210mm
+  const margin = 12;
+  const contentWidth = pageWidth - margin * 2;
+  let y = 12;
+
+  // --- CABEÇALHO PRINCIPAL ---
+  doc.setFont('helvetica', 'bold');
+  doc.setFontSize(16);
+  doc.setTextColor(0, 0, 0);
+  doc.text('CHINANGOL, LDA', margin, y);
+
+  doc.setFontSize(10);
+  doc.setTextColor(218, 41, 28); // Vermelho SANY
+  doc.text('SANY DEPARTMENT', margin, y + 5);
+
+  // Título da Ordem no canto direito
+  doc.setFont('helvetica', 'bold');
+  doc.setFontSize(12);
+  doc.setTextColor(0, 0, 0);
+  doc.text('FOLHA DE OBRA / ORDEM DE', pageWidth - margin, y, { align: 'right' });
+  doc.text('SERVIÇO', pageWidth - margin, y + 5, { align: 'right' });
+
+  // Caixa de destaque para o Número da OS
+  const boxWidth = 50;
+  const boxHeight = 8;
+  const boxX = pageWidth - margin - boxWidth;
+  const boxY = y + 8;
+
+  doc.setDrawColor(218, 41, 28);
+  doc.setLineWidth(0.8);
+  doc.rect(boxX, boxY, boxWidth, boxHeight);
+
+  doc.setFont('helvetica', 'bold');
+  doc.setFontSize(11);
+  doc.setTextColor(218, 41, 28);
+  doc.text(`Nº ${wo.number || 'OS-2026-A001'}`, boxX + boxWidth / 2, boxY + 5.5, { align: 'center' });
+
+  y += 20;
+
+  // Função Auxiliar para criar as barras de seção estilo Chinangol
+  const drawSectionHeader = (title: string, currentY: number) => {
+    doc.setFillColor(0, 0, 0);
+    doc.rect(margin, currentY, contentWidth, 6, 'F');
+
+    doc.setFillColor(218, 41, 28);
+    doc.rect(margin, currentY, 2, 6, 'F');
+
+    doc.setFont('helvetica', 'bold');
+    doc.setFontSize(9);
+    doc.setTextColor(255, 255, 255);
+    doc.text(title, margin + 5, currentY + 4.2);
+
+    return currentY + 6;
+  };
+
+  // --- SEÇÃO 1: IDENTIFICAÇÃO DO EQUIPAMENTO & CLIENTE ---
+  y = drawSectionHeader('1. IDENTIFICAÇÃO DO EQUIPAMENTO & CLIENTE', y);
+
+  const eqCode = equipment ? `${equipment.code || ''} ${equipment.name || ''}`.trim() : 'N/A';
+  const eqModel = equipment ? equipment.model || '' : '';
+  const serialNo = wo.serial_chassis || equipment?.serial_number || '';
+  const entryDate = wo.entry_date || wo.start_date || '';
+  const horometer = wo.hour_km_actual ? `${wo.hour_km_actual} H` : equipment?.horometer ? `${equipment.horometer} H` : '';
+  const clientProject = wo.client_project || '';
+  const receptionist = wo.technician_receptionist || wo.assigned_technician || '';
+
+  autoTable(doc, {
+    startY: y,
+    margin: { left: margin, right: margin },
+    tableWidth: contentWidth,
+    theme: 'grid',
+    styles: {
+      fontSize: 8,
+      cellPadding: 2,
+      textColor: [0, 0, 0],
+      lineColor: [180, 210, 235],
+      lineWidth: 0.3,
+    },
+    headStyles: {
+      fillColor: [235, 243, 250],
+      textColor: [0, 0, 0],
+      fontStyle: 'bold',
+      halign: 'center',
+    },
+    bodyStyles: {
+      halign: 'center',
+    },
+    head: [
+      ['ID DO EQUIPAMENTO', 'MODELO', 'No DE SÉRIE / CHASSI', 'DATA DE ENTRADA'],
+    ],
+    body: [
+      [eqCode, eqModel, serialNo, entryDate],
+      [
+        { content: 'HORÍMETRO / KM ATUAL', fontStyle: 'bold' },
+        { content: 'CLIENTE / PROJECTO', fontStyle: 'bold' },
+        { content: 'TÉCNICO / RECEPCIONISTA', fontStyle: 'bold', colSpan: 2 },
+      ],
+      [horometer, clientProject, { content: receptionist, colSpan: 2 }],
+    ],
+  });
+
+  y = (doc as any).lastAutoTable.finalY + 3;
+
+  // --- SEÇÃO 2: DIAGNÓSTICO TÉCNICO & TRABALHOS SOLICITADOS ---
+  y = drawSectionHeader('2. DIAGNÓSTICO TÉCNICO & TRABALHOS SOLICITADOS', y);
+
+  const diagHeight = 28;
+  doc.setDrawColor(180, 210, 235);
+  doc.setLineWidth(0.3);
+  doc.rect(margin, y, contentWidth, diagHeight);
+
+  doc.setFont('helvetica', 'normal');
+  doc.setFontSize(8);
+  doc.setTextColor(0, 0, 0);
+
+  const diagLines = wo.diagnosis_lines || [];
+  for (let i = 0; i < 6; i++) {
+    const lineText = diagLines[i]?.text || '';
+    const lineY = y + 4.5 + i * 4.2;
+    doc.text(`${i + 1} - ${lineText}`, margin + 3, lineY);
+  }
+
+  y += diagHeight + 3;
+
+  // --- SEÇÃO 3: INSPECÇÃO E CHECKLIST DE ENTRADA ---
+  y = drawSectionHeader('3. INSPECÇÃO E CHECKLIST DE ENTRADA', y);
+
+  const checklistHeight = 26;
+  doc.setDrawColor(180, 210, 235);
+  doc.rect(margin, y, contentWidth, checklistHeight);
+
+  const col1X = margin + 3;
+  const col2X = margin + (contentWidth / 2) + 2;
+
+  const getCheckSymbol = (labelSubstring: string) => {
+    const item = wo.entry_checklist?.find((c) => c.label.toLowerCase().includes(labelSubstring.toLowerCase()));
+    return item?.checked ? '[X]' : '[  ]';
+  };
+
+  doc.setFontSize(7.5);
+  // Coluna 1
+  doc.text(`Nível de Óleo do Motor (OK / Repor) ${getCheckSymbol('motor')}`, col1X, y + 4.5);
+  doc.text(`Nível de Óleo Hidráulico (OK / Repor) ${getCheckSymbol('hidráulico')}`, col1X, y + 9);
+  doc.text(`Líquido de Refrigeração (Radiador) ${getCheckSymbol('radiador')}`, col1X, y + 13.5);
+  doc.text(`Filtros de Ar e Combustível (Estado) ${getCheckSymbol('filtros')}`, col1X, y + 18);
+  doc.text(`Estado das Lagartas / Pneus e Aperto ${getCheckSymbol('pneus')}`, col1X, y + 22.5);
+
+  // Coluna 2
+  doc.text(`Sistema Elétrico, Luzes e Faróis ${getCheckSymbol('elétrico')}`, col2X, y + 4.5);
+  doc.text(`Vidros, Espelhos e Cabine do Operador ${getCheckSymbol('vidros')}`, col2X, y + 9);
+  doc.text(`Dispositivos de Segurança / Extintor ${getCheckSymbol('segurança')}`, col2X, y + 13.5);
+
+  // Nível de combustível
+  doc.setFont('helvetica', 'bold');
+  doc.text('NÍVEL COMBUSTÍVEL: E  [  ]  1/4  [  ]  1/2  [  ]  3/4  [  ]  F  [  ]', col2X, y + 22.5);
+
+  y += checklistHeight + 3;
+
+  // --- SEÇÃO 4: PEÇAS NECESSÁRIAS / SUBSTITUÍDAS (PART REQUEST) ---
+  y = drawSectionHeader('4. PEÇAS NECESSÁRIAS / SUBSTITUÍDAS (PART REQUEST)', y);
+
+  const partsData = (wo.parts_replaced && wo.parts_replaced.length > 0)
+    ? wo.parts_replaced.map((p) => [p.reference || '-', p.description || '-', p.quantity?.toString() || '1'])
+    : requisitionItems.length > 0
+    ? requisitionItems.map((item) => [item.part_number || '-', item.description || '-', item.quantity_requested?.toString() || '1'])
+    : [];
+
+  while (partsData.length < 5) {
+    partsData.push(['', '', '']);
+  }
+
+  autoTable(doc, {
+    startY: y,
+    margin: { left: margin, right: margin },
+    tableWidth: contentWidth,
+    theme: 'grid',
+    styles: {
+      fontSize: 8,
+      cellPadding: 2,
+      textColor: [0, 0, 0],
+      lineColor: [180, 210, 235],
+      lineWidth: 0.3,
+    },
+    headStyles: {
+      fillColor: [70, 160, 220],
+      textColor: [255, 255, 255],
+      fontStyle: 'bold',
+      halign: 'center',
+    },
+    columnStyles: {
+      0: { cellWidth: 50, halign: 'center' },
+      1: { cellWidth: 'auto', halign: 'left' },
+      2: { cellWidth: 40, halign: 'center' },
+    },
+    head: [['REFERÊNCIA', 'DESCRIÇÃO DA PEÇA', 'QUANTIDADE']],
+    body: partsData,
+  });
+
+  y = (doc as any).lastAutoTable.finalY + 3;
+
+  // --- SEÇÃO 5: OBSERVAÇÕES DE SAÍDA / NOTAS ADICIONAIS ---
+  y = drawSectionHeader('5. OBSERVAÇÕES DE SAÍDA / NOTAS ADICIONAIS', y);
+
+  const obsHeight = 24;
+  doc.setDrawColor(180, 210, 235);
+  doc.rect(margin, y, contentWidth, obsHeight);
+
+  doc.setFont('helvetica', 'normal');
+  doc.setFontSize(8);
+  doc.setTextColor(0, 0, 0);
+
+  const obsText = wo.exit_observations || '';
+  const obsLines = obsText ? obsText.split('\n') : [];
+
+  for (let i = 0; i < 5; i++) {
+    const lineText = obsLines[i] || '';
+    const lineY = y + 4.5 + i * 4.2;
+    doc.text(`${i + 1} - ${lineText}`, margin + 3, lineY);
+  }
+
+  y += obsHeight + 20;
+
+  // --- ASSINATURAS DE RODAPÉ ---
+  const sigWidth = 50;
+  const gap = (contentWidth - sigWidth * 3) / 2;
+
+  const sig1X = margin;
+  const sig2X = sig1X + sigWidth + gap;
+  const sig3X = sig2X + sigWidth + gap;
+
+  doc.setDrawColor(0, 0, 0);
+  doc.setLineWidth(0.5);
+
+  doc.line(sig1X, y, sig1X + sigWidth, y);
+  doc.line(sig2X, y, sig2X + sigWidth, y);
+  doc.line(sig3X, y, sig3X + sigWidth, y);
+
+  doc.setFont('helvetica', 'bold');
+  doc.setFontSize(8);
+  doc.setTextColor(0, 0, 0);
+
+  doc.text('MECÂNICO / TÉCNICO', sig1X + sigWidth / 2, y + 4, { align: 'center' });
+  doc.text('ENGENHEIRO', sig2X + sigWidth / 2, y + 4, { align: 'center' });
+  doc.text('CLIENTE', sig3X + sigWidth / 2, y + 4, { align: 'center' });
+
+  doc.setFont('helvetica', 'normal');
+  doc.setFontSize(7);
+  if (wo.mechanic_sign) doc.text(wo.mechanic_sign, sig1X + sigWidth / 2, y + 8, { align: 'center' });
+  if (wo.engineer_sign) doc.text(wo.engineer_sign, sig2X + sigWidth / 2, y + 8, { align: 'center' });
+  if (wo.client_sign) doc.text(wo.client_sign, sig3X + sigWidth / 2, y + 8, { align: 'center' });
+
+  return doc;
+};
+
+// --- COMPONENTE DA PÁGINA ---
 const STATUSES: { value: WorkOrderStatus; label: string }[] = [
+  { value: 'draft', label: 'Draft' },
   { value: 'open', label: 'Open' },
   { value: 'in_progress', label: 'In Progress' },
-  { value: 'waiting_parts', label: 'Waiting for Parts' },
+  { value: 'pending_parts', label: 'Pending Parts' },
   { value: 'completed', label: 'Completed' },
   { value: 'cancelled', label: 'Cancelled' },
 ];
 
-const PRIORITIES: { value: Priority; label: string }[] = [
-  { value: 'low', label: 'Low' },
-  { value: 'medium', label: 'Medium' },
-  { value: 'high', label: 'High' },
-  { value: 'critical', label: 'Critical' },
-];
-
-const ENTRY_CHECKLIST_ITEMS = [
-  'Engine Oil Level',
-  'Hydraulic Oil Level',
-  'Coolant / Radiator Liquid',
-  'Air / Fuel Filters State',
-  'Tracks / Tires & Tightness',
-  'Electrical System & Lights',
-  'Glass / Mirrors / Operator Cab',
-  'Safety Devices & Extinguisher',
-];
-
 const PAGE_SIZE = 8;
 
-function makeChecklist(): ChecklistItem[] {
-  return ENTRY_CHECKLIST_ITEMS.map((label, i) => ({ id: `wc${i}`, label, checked: false, note: '' }));
-}
-
-let diagIdCounter = 0;
-function makeDiagnosisLine(text = ''): DiagnosisLine {
-  return { id: `dl-${Date.now()}-${diagIdCounter++}`, text };
-}
-
-let partIdCounter = 0;
-function makePart(ref = '', desc = '', qty = 1): WorkOrderPart {
-  return { id: `wp-${Date.now()}-${partIdCounter++}`, reference: ref, description: desc, quantity: qty };
-}
-
-/**
- * Normalizes and sanitizes work order payload for Supabase insertion/update
- */
-function prepareWorkOrderPayload(data: Partial<WorkOrder>, userId?: string) {
-  const cleanDiagnosis = (data.diagnosis_lines || [])
-    .filter((line) => line.text && line.text.trim() !== '')
-    .map(({ id, ...rest }) => rest);
-
-  const cleanChecklist = (data.entry_checklist || []).map((item) => ({
-    id: item.id,
-    label: item.label,
-    checked: Boolean(item.checked),
-    note: item.note || '',
-  }));
-
-  const payload: Record<string, any> = {
-    number: data.number,
-    equipment_id: data.equipment_id,
-    type: data.type || 'mechanical',
-    status: data.status || 'open',
-    priority: data.priority || 'medium',
-    description: data.description || '',
-    start_date: data.start_date || new Date().toISOString().split('T')[0],
-    entry_date: data.entry_date || new Date().toISOString().split('T')[0],
-    end_date: data.end_date ? data.end_date : null,
-    assigned_technician: data.assigned_technician?.trim() || null,
-    serial_chassis: data.serial_chassis?.trim() || null,
-    hour_km_actual: data.hour_km_actual !== undefined && data.hour_km_actual !== '' ? Number(data.hour_km_actual) : null,
-    client_project: data.client_project?.trim() || null,
-    technician_receptionist: data.technician_receptionist?.trim() || null,
-    exit_observations: data.exit_observations?.trim() || null,
-    mechanic_sign: data.mechanic_sign?.trim() || null,
-    engineer_sign: data.engineer_sign?.trim() || null,
-    client_sign: data.client_sign?.trim() || null,
-    diagnosis_lines: cleanDiagnosis,
-    entry_checklist: cleanChecklist,
-  };
-
-  if (data.id) {
-    payload.id = data.id;
-  } else if (userId) {
-    payload.user_id = userId;
-  }
-
-  return payload;
-}
-
 export function WorkOrdersPage() {
-  const { workOrders, equipment, requisitions, requisitionItems, saveWorkOrder, deleteWorkOrder, refresh, refreshData } = useData();
+  const { workOrders, equipment, requisitionItems, saveWorkOrder, deleteWorkOrder } = useData();
   const { profile } = useAuth();
   const { toast } = useToast();
+  const { generateAndSave } = usePdfGenerator();
+
   const [search, setSearch] = useState('');
   const [statusFilter, setStatusFilter] = useState('all');
   const [page, setPage] = useState(1);
@@ -137,29 +317,22 @@ export function WorkOrdersPage() {
   const [deleteId, setDeleteId] = useState<string | null>(null);
   const [editing, setEditing] = useState<WorkOrder | null>(null);
   const [form, setForm] = useState<Partial<WorkOrder>>({});
-  const [, setDetailWO] = useState<WorkOrder | null>(null);
-  const [saving, setSaving] = useState(false);
-  const [completingId, setCompletingId] = useState<string | null>(null);
+  const [detailWO, setDetailWO] = useState<WorkOrder | null>(null);
+  const [isSaving, setIsSaving] = useState(false);
 
-  const triggerRefresh = refresh || refreshData;
-
-  const canEdit = profile?.role === 'admin' || profile?.role === 'equipment_manager' || profile?.role === 'workshop_supervisor' || profile?.role === 'user';
-  const canDelete = profile?.role === 'admin' || profile?.role === 'equipment_manager';
-
-  const getEquipment = (id: string) => equipment.find((e) => e.id === id);
+  const canEdit = profile?.role === 'admin' || profile?.role === 'user';
+  const canDelete = profile?.role === 'admin';
 
   const filtered = useMemo(() => {
     return workOrders.filter((w) => {
-      const eq = getEquipment(w.equipment_id);
       const matchSearch = !search ||
         w.number.toLowerCase().includes(search.toLowerCase()) ||
-        (eq?.name || '').toLowerCase().includes(search.toLowerCase()) ||
-        (eq?.serial_number || '').toLowerCase().includes(search.toLowerCase()) ||
-        (w.assigned_technician || '').toLowerCase().includes(search.toLowerCase());
+        (w.client_project && w.client_project.toLowerCase().includes(search.toLowerCase())) ||
+        (w.assigned_technician && w.assigned_technician.toLowerCase().includes(search.toLowerCase()));
       const matchStatus = statusFilter === 'all' || w.status === statusFilter;
       return matchSearch && matchStatus;
     });
-  }, [workOrders, equipment, search, statusFilter]);
+  }, [workOrders, search, statusFilter]);
 
   const totalPages = Math.ceil(filtered.length / PAGE_SIZE) || 1;
   const paginated = filtered.slice((page - 1) * PAGE_SIZE, page * PAGE_SIZE);
@@ -167,203 +340,106 @@ export function WorkOrdersPage() {
   const openCreate = () => {
     setEditing(null);
     setForm({
-      number: generateNumber('OS', workOrders.map((w) => w.number)),
-      type: 'mechanical',
+      number: generateNumber('OS-2026', workOrders.map((w) => w.number)),
       status: 'open',
-      priority: 'medium',
-      start_date: new Date().toISOString().split('T')[0],
+      client_project: 'CHINANGOL, LDA',
       entry_date: new Date().toISOString().split('T')[0],
-      diagnosis_lines: [makeDiagnosisLine()],
-      entry_checklist: makeChecklist(),
-      parts_replaced: [],
-      serial_chassis: '',
-      hour_km_actual: '',
-      client_project: '',
-      technician_receptionist: profile?.full_name || '',
-      exit_observations: '',
-      mechanic_sign: '',
-      engineer_sign: '',
-      client_sign: '',
+      assigned_technician: profile?.full_name || '',
     });
     setDialogOpen(true);
   };
 
-  const openEdit = async (wo: WorkOrder) => {
+  const openEdit = (wo: WorkOrder) => {
     setEditing(wo);
-
-    let currentParts = wo.parts_replaced || [];
-    try {
-      const { data: dbParts } = await supabase
-        .from('work_order_parts')
-        .select('*')
-        .eq('work_order_id', wo.id);
-      if (dbParts && dbParts.length > 0) {
-        currentParts = dbParts;
-      }
-    } catch (e) {
-      console.warn('Could not load work order parts from relational table:', e);
-    }
-
-    setForm({
-      ...wo,
-      diagnosis_lines: wo.diagnosis_lines?.length ? wo.diagnosis_lines : [makeDiagnosisLine()],
-      entry_checklist: wo.entry_checklist?.length ? wo.entry_checklist : makeChecklist(),
-      parts_replaced: currentParts,
-    });
+    setForm({ ...wo });
     setDialogOpen(true);
   };
 
   const handleSave = async () => {
-    if (!form.equipment_id || !form.description) {
-      toast({ title: 'Validation Error', description: 'Equipment and Description are required fields.', variant: 'destructive' });
+    if (!form.number) {
+      toast({ title: 'Work Order number is required', variant: 'destructive' });
       return;
     }
 
-    setSaving(true);
+    setIsSaving(true);
     try {
-      const payload = prepareWorkOrderPayload(form, profile?.id);
-      const result = await saveWorkOrder(payload as any);
-
-      if (result?.error) {
-        throw new Error(typeof result.error === 'object' ? JSON.stringify(result.error) : String(result.error));
-      }
-
-      const savedWoId = form.id || result?.data?.id;
-
-      if (savedWoId && form.parts_replaced) {
-        await supabase.from('work_order_parts').delete().eq('work_order_id', savedWoId);
-
-        const partsToInsert = (form.parts_replaced || [])
-          .filter((p) => p.description?.trim() || p.reference?.trim())
-          .map((p) => ({
-            work_order_id: savedWoId,
-            reference: p.reference || '',
-            description: p.description || '',
-            quantity: Number(p.quantity) || 1,
-          }));
-
-        if (partsToInsert.length > 0) {
-          const { error: partsError } = await supabase.from('work_order_parts').insert(partsToInsert);
-          if (partsError) console.error('Error inserting parts:', partsError);
-        }
-      }
-
-      if (triggerRefresh) await triggerRefresh();
-
-      toast({ title: 'Success', description: editing ? 'Work Order updated successfully.' : 'Work Order created successfully.' });
-      setDialogOpen(false);
-    } catch (err: any) {
-      console.error('Fatal error saving Work Order:', err);
-      toast({
-        title: 'Error Saving to Supabase',
-        description: err?.message || 'Check browser console (F12) for details.',
-        variant: 'destructive',
-      });
-    } finally {
-      setSaving(false);
-    }
-  };
-
-  const handleFinalizeWorkOrder = async (wo: WorkOrder) => {
-    setCompletingId(wo.id);
-    try {
-      const updatedForm: Partial<WorkOrder> = {
-        ...wo,
-        status: 'completed',
-        end_date: new Date().toISOString().split('T')[0],
+      const payload = {
+        ...form,
+        updated_at: new Date().toISOString(),
       };
 
-      const payload = prepareWorkOrderPayload(updatedForm, profile?.id);
-      const result = await saveWorkOrder(payload as any);
+      const { error } = await saveWorkOrder(payload as WorkOrder);
+      if (error) {
+        toast({ title: 'Error saving Work Order', description: error, variant: 'destructive' });
+        return;
+      }
 
-      if (result?.error) throw new Error(String(result.error));
-
-      if (triggerRefresh) await triggerRefresh();
-      toast({ title: 'Work Order Completed', description: `WO ${wo.number} has been closed.` });
+      toast({ title: editing ? 'Work Order updated successfully' : 'Work Order created successfully' });
+      setDialogOpen(false);
     } catch (err: any) {
-      console.error('Error completing WO:', err);
-      toast({ title: 'Error Completing WO', description: err?.message, variant: 'destructive' });
+      toast({ title: 'Error saving Work Order', description: err.message, variant: 'destructive' });
     } finally {
-      setCompletingId(null);
+      setIsSaving(false);
     }
   };
 
   const handleDelete = async () => {
     if (!deleteId) return;
-    try {
-      const { error } = await deleteWorkOrder(deleteId);
-      if (error) throw new Error(String(error));
-
-      if (triggerRefresh) await triggerRefresh();
-      toast({ title: 'Work Order Deleted' });
-    } catch (err: any) {
-      toast({ title: 'Error Deleting', description: err?.message, variant: 'destructive' });
+    const { error } = await deleteWorkOrder(deleteId);
+    if (error) {
+      toast({ title: 'Error deleting Work Order', description: error, variant: 'destructive' });
+    } else {
+      toast({ title: 'Work Order deleted successfully' });
     }
     setDeleteId(null);
   };
 
-  const getPartsForWO = (woId: string) => {
-    const reqIds = requisitions.filter((r) => r.work_order_id === woId).map((r) => r.id);
-    return requisitionItems.filter((i) => reqIds.includes(i.requisition_id));
+  const handleStatusChange = async (wo: WorkOrder, status: WorkOrderStatus) => {
+    const updates: Partial<WorkOrder> = { id: wo.id, status, updated_at: new Date().toISOString() };
+    const { error } = await saveWorkOrder({ ...wo, ...updates } as WorkOrder);
+    if (error) {
+      toast({ title: 'Error updating status', description: error, variant: 'destructive' });
+    } else {
+      toast({ title: `Status changed to ${WORK_ORDER_STATUS_LABELS[status] || status}` });
+      if (detailWO?.id === wo.id) {
+        setDetailWO({ ...detailWO, ...updates } as WorkOrder);
+      }
+    }
   };
 
   const handlePreview = (wo: WorkOrder) => {
-    const eq = getEquipment(wo.equipment_id);
-    const items = getPartsForWO(wo.id);
-    const doc = generateWorkOrderPDF(wo, eq, [], items);
+    const eq = equipment.find((e) => e.id === wo.equipment_id);
+    const reqItems = requisitionItems.filter((i) => i.requisition_id === wo.id);
+    const doc = generateWorkOrderPDF(wo, eq, [], reqItems);
     previewPDF(doc);
   };
 
   const handleDownload = (wo: WorkOrder) => {
-    const eq = getEquipment(wo.equipment_id);
-    const items = getPartsForWO(wo.id);
-    const doc = generateWorkOrderPDF(wo, eq, [], items);
+    const eq = equipment.find((e) => e.id === wo.equipment_id);
+    const reqItems = requisitionItems.filter((i) => i.requisition_id === wo.id);
+    const doc = generateWorkOrderPDF(wo, eq, [], reqItems);
     downloadPDF(doc, `${wo.number}.pdf`);
   };
 
-  const toggleChecklist = (idx: number, checked: boolean) => {
-    const checklist = [...(form.entry_checklist || [])];
-    checklist[idx] = { ...checklist[idx], checked };
-    setForm({ ...form, entry_checklist: checklist });
-  };
-
-  const updateDiagLine = (idx: number, text: string) => {
-    const lines = [...(form.diagnosis_lines || [])];
-    lines[idx] = { ...lines[idx], text };
-    setForm({ ...form, diagnosis_lines: lines });
-  };
-
-  const addDiagLine = () => {
-    setForm({ ...form, diagnosis_lines: [...(form.diagnosis_lines || []), makeDiagnosisLine()] });
-  };
-
-  const removeDiagLine = (idx: number) => {
-    const lines = (form.diagnosis_lines || []).filter((_, i) => i !== idx);
-    setForm({ ...form, diagnosis_lines: lines });
-  };
-
-  const updatePart = (idx: number, field: keyof WorkOrderPart, value: string | number) => {
-    const parts = [...(form.parts_replaced || [])];
-    parts[idx] = { ...parts[idx], [field]: value };
-    setForm({ ...form, parts_replaced: parts });
-  };
-
-  const addPart = () => {
-    setForm({ ...form, parts_replaced: [...(form.parts_replaced || []), makePart()] });
-  };
-
-  const removePart = (idx: number) => {
-    const parts = (form.parts_replaced || []).filter((_, i) => i !== idx);
-    setForm({ ...form, parts_replaced: parts });
+  const handleSaveAndUpload = async (wo: WorkOrder) => {
+    const eq = equipment.find((e) => e.id === wo.equipment_id);
+    const reqItems = requisitionItems.filter((i) => i.requisition_id === wo.id);
+    const doc = generateWorkOrderPDF(wo, eq, [], reqItems);
+    const { error } = await generateAndSave(doc, 'work_order', wo.id, wo.number, `Work Order ${wo.number}`);
+    if (error) {
+      toast({ title: 'Error saving PDF', description: error, variant: 'destructive' });
+    } else {
+      toast({ title: 'PDF generated and stored in system', description: `${wo.number}.pdf saved in documents` });
+    }
   };
 
   return (
     <div>
       <PageHeader
         title="Work Orders"
-        description="Management of workshop service orders — mechanical, hydraulic, and electromechanical."
+        description="Manage equipment repair and maintenance Work Orders"
         action={canEdit && (
-          <Button type="button" onClick={openCreate}>
+          <Button onClick={openCreate}>
             <Plus className="w-4 h-4 mr-1" />
             New Work Order
           </Button>
@@ -373,74 +449,62 @@ export function WorkOrdersPage() {
       <FilterBar
         search={search}
         onSearchChange={(v) => { setSearch(v); setPage(1); }}
-        searchPlaceholder="Search by number, equipment, serial number, technician..."
+        searchPlaceholder="Search by OS number, client, technician..."
         filters={<StatusFilter value={statusFilter} onChange={(v) => { setStatusFilter(v); setPage(1); }} options={STATUSES} />}
       />
 
       <Card>
         <CardContent className="p-0">
           {paginated.length === 0 ? (
-            <EmptyState icon={<Wrench className="w-12 h-12" />} title="No Work Orders Found" description="Create your first Work Order to start tracking." />
+            <EmptyState icon={<Wrench className="w-12 h-12" />} title="No Work Orders found" description="Create your first equipment Work Order" />
           ) : (
             <Table>
               <TableHeader>
                 <TableRow>
-                  <TableHead>WO Number</TableHead>
-                  <TableHead>Equipment</TableHead>
-                  <TableHead className="hidden md:table-cell">Type</TableHead>
-                  <TableHead className="hidden sm:table-cell">Priority</TableHead>
+                  <TableHead>OS Number</TableHead>
+                  <TableHead className="hidden md:table-cell">Client / Project</TableHead>
+                  <TableHead>Technician</TableHead>
+                  <TableHead className="hidden sm:table-cell">Entry Date</TableHead>
                   <TableHead>Status</TableHead>
                   <TableHead className="text-right">Actions</TableHead>
                 </TableRow>
               </TableHeader>
               <TableBody>
                 {paginated.map((wo) => {
-                  const eq = getEquipment(wo.equipment_id);
-                  const isCompleting = completingId === wo.id;
                   return (
                     <TableRow key={wo.id} className="hover:bg-muted/50 cursor-pointer" onClick={() => setDetailWO(wo)}>
                       <TableCell className="font-mono font-medium">{wo.number}</TableCell>
-                      <TableCell>
-                        <div className="font-medium">{eq?.name || 'Unknown Equipment'}</div>
-                        <div className="text-xs text-muted-foreground">
-                          {eq?.serial_number ? `S/N: ${eq.serial_number} • ` : ''}{wo.assigned_technician || 'No Tech Assigned'}
-                        </div>
+                      <TableCell className="hidden md:table-cell text-sm">{wo.client_project || '—'}</TableCell>
+                      <TableCell>{wo.assigned_technician || wo.technician_receptionist || '—'}</TableCell>
+                      <TableCell className="hidden sm:table-cell text-xs">{wo.entry_date || wo.start_date || '—'}</TableCell>
+                      <TableCell onClick={(e) => e.stopPropagation()}>
+                        <Select value={wo.status} onValueChange={(v) => handleStatusChange(wo, v as WorkOrderStatus)}>
+                          <SelectTrigger className="w-[130px] h-7 text-xs">
+                            <SelectValue />
+                          </SelectTrigger>
+                          <SelectContent>
+                            {STATUSES.map((s) => <SelectItem key={s.value} value={s.value}>{s.label}</SelectItem>)}
+                          </SelectContent>
+                        </Select>
                       </TableCell>
-                      <TableCell className="hidden md:table-cell capitalize">{wo.type?.replace(/_/g, ' ')}</TableCell>
-                      <TableCell className="hidden sm:table-cell">
-                        <span className={cn('inline-flex px-2 py-0.5 rounded-full text-xs font-medium', PRIORITY_COLORS[wo.priority])}>
-                          {PRIORITY_LABELS[wo.priority]}
-                        </span>
-                      </TableCell>
-                      <TableCell><StatusBadge status={wo.status} label={WORK_ORDER_STATUS_LABELS[wo.status]} /></TableCell>
                       <TableCell className="text-right" onClick={(e) => e.stopPropagation()}>
                         <div className="flex justify-end gap-1">
-                          {canEdit && wo.status !== 'completed' && (
-                            <Button
-                              type="button"
-                              variant="ghost"
-                              size="icon"
-                              className="h-8 w-8 text-emerald-600 hover:text-emerald-700 hover:bg-emerald-50"
-                              onClick={() => handleFinalizeWorkOrder(wo)}
-                              disabled={isCompleting}
-                              title="Complete Work Order"
-                            >
-                              {isCompleting ? <Loader2 className="w-4 h-4 animate-spin" /> : <CheckCircle2 className="w-4 h-4" />}
-                            </Button>
-                          )}
-                          <Button type="button" variant="ghost" size="icon" className="h-8 w-8" onClick={() => handlePreview(wo)} title="Preview PDF">
+                          <Button variant="ghost" size="icon" className="h-8 w-8" onClick={() => handlePreview(wo)} title="Preview PDF">
                             <Eye className="w-4 h-4" />
                           </Button>
-                          <Button type="button" variant="ghost" size="icon" className="h-8 w-8" onClick={() => handleDownload(wo)} title="Print / Download PDF">
+                          <Button variant="ghost" size="icon" className="h-8 w-8" onClick={() => handleDownload(wo)} title="Download PDF">
                             <Printer className="w-4 h-4" />
                           </Button>
+                          <Button variant="ghost" size="icon" className="h-8 w-8" onClick={() => setDetailWO(wo)}>
+                            <ChevronRight className="w-4 h-4" />
+                          </Button>
                           {canEdit && (
-                            <Button type="button" variant="ghost" size="icon" className="h-8 w-8" onClick={() => openEdit(wo)}>
+                            <Button variant="ghost" size="icon" className="h-8 w-8" onClick={() => openEdit(wo)}>
                               <Pencil className="w-4 h-4" />
                             </Button>
                           )}
                           {canDelete && (
-                            <Button type="button" variant="ghost" size="icon" className="h-8 w-8 text-destructive" onClick={() => setDeleteId(wo.id)}>
+                            <Button variant="ghost" size="icon" className="h-8 w-8 text-destructive" onClick={() => setDeleteId(wo.id)}>
                               <Trash2 className="w-4 h-4" />
                             </Button>
                           )}
@@ -459,304 +523,129 @@ export function WorkOrdersPage() {
         <Pagination page={page} totalPages={totalPages} onPageChange={setPage} total={filtered.length} pageSize={PAGE_SIZE} />
       )}
 
-      {/* Modal Create / Edit */}
+      {/* Modal Criar / Editar */}
       <Dialog open={dialogOpen} onOpenChange={setDialogOpen}>
         <DialogContent className="max-w-3xl max-h-[90vh] overflow-y-auto">
           <DialogHeader>
             <DialogTitle>{editing ? 'Edit Work Order' : 'New Work Order'}</DialogTitle>
-            <DialogDescription>
-              {editing ? `Updating details for ${editing.number}` : 'Fill in the details to open a new service order.'}
-            </DialogDescription>
+            <DialogDescription>Fill in equipment and service details below</DialogDescription>
           </DialogHeader>
-
-          <Tabs defaultValue="general" className="w-full py-2">
-            <TabsList className="grid w-full grid-cols-5">
-              <TabsTrigger value="general">General</TabsTrigger>
-              <TabsTrigger value="diagnosis">Diagnosis</TabsTrigger>
-              <TabsTrigger value="checklist">Checklist</TabsTrigger>
-              <TabsTrigger value="parts">Parts Required</TabsTrigger>
-              <TabsTrigger value="signoff">Sign-Off</TabsTrigger>
-            </TabsList>
-
-            {/* General Tab */}
-            <TabsContent value="general" className="space-y-4 pt-4">
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                <div className="space-y-2">
-                  <Label>WO Number</Label>
-                  <Input value={form.number || ''} readOnly className="bg-muted font-mono" />
-                </div>
-
-                <div className="space-y-2">
-                  <Label>Equipment *</Label>
-                  <Select
-                    value={form.equipment_id || ''}
-                    onValueChange={(v) => {
-                      const eq = equipment.find((e) => e.id === v);
-                      setForm({
-                        ...form,
-                        equipment_id: v,
-                        serial_chassis: eq?.serial_number || form.serial_chassis,
-                        hour_km_actual: eq?.horometer || eq?.odometer || form.hour_km_actual,
-                      });
-                    }}
-                  >
-                    <SelectTrigger><SelectValue placeholder="Select Equipment" /></SelectTrigger>
-                    <SelectContent>
-                      {equipment.map((e) => (
-                        <SelectItem key={e.id} value={e.id}>
-                          {e.name} ({e.brand} {e.model}) - {e.serial_number}
-                        </SelectItem>
-                      ))}
-                    </SelectContent>
-                  </Select>
-                </div>
-
-                <div className="space-y-2">
-                  <Label>Serial / Chassis No.</Label>
-                  <Input
-                    value={form.serial_chassis || ''}
-                    onChange={(e) => setForm({ ...form, serial_chassis: e.target.value })}
-                    placeholder="e.g. BC5260CG1383"
-                  />
-                </div>
-
-                <div className="space-y-2">
-                  <Label>Entry Date</Label>
-                  <Input
-                    type="date"
-                    value={form.entry_date || ''}
-                    onChange={(e) => setForm({ ...form, entry_date: e.target.value })}
-                  />
-                </div>
-
-                <div className="space-y-2">
-                  <Label>Current Horometer / Odometer (KM/H)</Label>
-                  <Input
-                    type="number"
-                    value={form.hour_km_actual ?? ''}
-                    onChange={(e) => setForm({ ...form, hour_km_actual: e.target.value })}
-                    placeholder="e.g. 51.3 H"
-                  />
-                </div>
-
-                <div className="space-y-2">
-                  <Label>Client / Project</Label>
-                  <Input
-                    value={form.client_project || ''}
-                    onChange={(e) => setForm({ ...form, client_project: e.target.value })}
-                    placeholder="e.g. OMATAPALO / Site A"
-                  />
-                </div>
-
-                <div className="space-y-2">
-                  <Label>Receptionist / Lead Tech</Label>
-                  <Input
-                    value={form.technician_receptionist || ''}
-                    onChange={(e) => setForm({ ...form, technician_receptionist: e.target.value })}
-                    placeholder="e.g. SACULILA"
-                  />
-                </div>
-
-                <div className="space-y-2">
-                  <Label>Assigned Mechanic</Label>
-                  <Input
-                    value={form.assigned_technician || ''}
-                    onChange={(e) => setForm({ ...form, assigned_technician: e.target.value })}
-                    placeholder="Assigned technician name"
-                  />
-                </div>
-
-                <div className="space-y-2">
-                  <Label>Service Type</Label>
-                  <Select value={form.type || 'mechanical'} onValueChange={(v) => setForm({ ...form, type: v as WorkOrderType })}>
-                    <SelectTrigger><SelectValue /></SelectTrigger>
-                    <SelectContent>
-                      {TYPES.map((t) => <SelectItem key={t.value} value={t.value}>{t.label}</SelectItem>)}
-                    </SelectContent>
-                  </Select>
-                </div>
-
-                <div className="space-y-2">
-                  <Label>Priority</Label>
-                  <Select value={form.priority || 'medium'} onValueChange={(v) => setForm({ ...form, priority: v as Priority })}>
-                    <SelectTrigger><SelectValue /></SelectTrigger>
-                    <SelectContent>
-                      {PRIORITIES.map((p) => <SelectItem key={p.value} value={p.value}>{p.label}</SelectItem>)}
-                    </SelectContent>
-                  </Select>
-                </div>
-
-                <div className="space-y-2">
-                  <Label>Status</Label>
-                  <Select value={form.status || 'open'} onValueChange={(v) => setForm({ ...form, status: v as WorkOrderStatus })}>
-                    <SelectTrigger><SelectValue /></SelectTrigger>
-                    <SelectContent>
-                      {STATUSES.map((s) => <SelectItem key={s.value} value={s.value}>{s.label}</SelectItem>)}
-                    </SelectContent>
-                  </Select>
-                </div>
-              </div>
-
+          <div className="space-y-4 py-2">
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
               <div className="space-y-2">
-                <Label>Fault / Maintenance Description *</Label>
-                <Textarea
-                  value={form.description || ''}
-                  onChange={(e) => setForm({ ...form, description: e.target.value })}
-                  placeholder="Reported faults, issues, or requested service operations"
-                  rows={3}
-                />
+                <Label>OS Number *</Label>
+                <Input value={form.number || ''} onChange={(e) => setForm({ ...form, number: e.target.value })} className="font-mono" placeholder="OS-2026-A001" />
               </div>
-            </TabsContent>
-
-            {/* Diagnosis Tab */}
-            <TabsContent value="diagnosis" className="space-y-4 pt-4">
-              <Label className="text-base font-semibold">2. Technical Diagnosis & Requested Tasks</Label>
-              <div className="space-y-3">
-                {(form.diagnosis_lines || []).map((line, idx) => (
-                  <div key={line.id || idx} className="flex items-center gap-2">
-                    <span className="text-sm font-semibold w-6">{idx + 1}.</span>
-                    <Input
-                      value={line.text}
-                      onChange={(e) => updateDiagLine(idx, e.target.value)}
-                      placeholder={`Task / Diagnosis line ${idx + 1}`}
-                    />
-                    <Button
-                      type="button"
-                      variant="ghost"
-                      size="icon"
-                      className="text-destructive"
-                      onClick={() => removeDiagLine(idx)}
-                      disabled={(form.diagnosis_lines || []).length <= 1}
-                    >
-                      <Trash2 className="w-4 h-4" />
-                    </Button>
-                  </div>
-                ))}
-                <Button type="button" variant="outline" size="sm" onClick={addDiagLine}>
-                  <Plus className="w-4 h-4 mr-1" /> Add Line
-                </Button>
+              <div className="space-y-2">
+                <Label>Entry Date</Label>
+                <Input type="date" value={form.entry_date || ''} onChange={(e) => setForm({ ...form, entry_date: e.target.value })} />
               </div>
-            </TabsContent>
-
-            {/* Inspection & Checklist Tab */}
-            <TabsContent value="checklist" className="space-y-4 pt-4">
-              <Label className="text-base font-semibold">3. Entry Inspection & Checklist</Label>
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-                {(form.entry_checklist || []).map((item, idx) => (
-                  <div key={item.id || idx} className="flex items-center justify-between border p-3 rounded-lg">
-                    <span className="text-sm font-medium">{item.label}</span>
-                    <Checkbox
-                      checked={item.checked}
-                      onCheckedChange={(checked) => toggleChecklist(idx, Boolean(checked))}
-                    />
-                  </div>
-                ))}
+              <div className="space-y-2">
+                <Label>Equipment</Label>
+                <Select value={form.equipment_id || 'none'} onValueChange={(v) => {
+                  const eq = equipment.find((e) => e.id === v);
+                  setForm({
+                    ...form,
+                    equipment_id: v === 'none' ? null : v,
+                    serial_chassis: eq?.serial_number || form.serial_chassis,
+                    hour_km_actual: eq?.horometer ? String(eq.horometer) : form.hour_km_actual,
+                  });
+                }}>
+                  <SelectTrigger><SelectValue placeholder="Select Equipment..." /></SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="none">None</SelectItem>
+                    {equipment.map((e) => <SelectItem key={e.id} value={e.id}>{e.code} - {e.name}</SelectItem>)}
+                  </SelectContent>
+                </Select>
               </div>
-            </TabsContent>
-
-            {/* Parts Tab */}
-            <TabsContent value="parts" className="space-y-4 pt-4">
-              <Label className="text-base font-semibold">4. Required / Replaced Parts (Part Request)</Label>
-              <div className="space-y-3">
-                {(form.parts_replaced || []).map((part, idx) => (
-                  <div key={part.id || idx} className="grid grid-cols-12 gap-2 items-center">
-                    <div className="col-span-4">
-                      <Input
-                        value={part.reference}
-                        onChange={(e) => updatePart(idx, 'reference', e.target.value)}
-                        placeholder="Part Reference / P/N"
-                      />
-                    </div>
-                    <div className="col-span-5">
-                      <Input
-                        value={part.description}
-                        onChange={(e) => updatePart(idx, 'description', e.target.value)}
-                        placeholder="Part Description"
-                      />
-                    </div>
-                    <div className="col-span-2">
-                      <Input
-                        type="number"
-                        value={part.quantity || ''}
-                        onChange={(e) => updatePart(idx, 'quantity', Number(e.target.value))}
-                        placeholder="Qty"
-                      />
-                    </div>
-                    <div className="col-span-1 flex justify-end">
-                      <Button type="button" variant="ghost" size="icon" className="text-destructive" onClick={() => removePart(idx)}>
-                        <Trash2 className="w-4 h-4" />
-                      </Button>
-                    </div>
-                  </div>
-                ))}
-                <Button type="button" variant="outline" size="sm" onClick={addPart}>
-                  <Plus className="w-4 h-4 mr-1" /> Add Part
-                </Button>
+              <div className="space-y-2">
+                <Label>Client / Project</Label>
+                <Input value={form.client_project || ''} onChange={(e) => setForm({ ...form, client_project: e.target.value })} placeholder="CHINANGOL, LDA" />
               </div>
-            </TabsContent>
-
-            {/* Sign-Off Tab */}
-            <TabsContent value="signoff" className="space-y-4 pt-4">
-              <div className="space-y-4">
-                <div className="space-y-2">
-                  <Label>5. Exit Observations / Additional Notes</Label>
-                  <Textarea
-                    value={form.exit_observations || ''}
-                    onChange={(e) => setForm({ ...form, exit_observations: e.target.value })}
-                    placeholder="Enter final remarks, testing status, or exit notes..."
-                    rows={3}
-                  />
-                </div>
-
-                <div className="grid grid-cols-1 sm:grid-cols-3 gap-4 border-t pt-4">
-                  <div className="space-y-2">
-                    <Label>Mechanic / Technician Sign-off</Label>
-                    <Input
-                      value={form.mechanic_sign || ''}
-                      onChange={(e) => setForm({ ...form, mechanic_sign: e.target.value })}
-                      placeholder="Technician Name"
-                    />
-                  </div>
-                  <div className="space-y-2">
-                    <Label>Engineer / Supervisor Sign-off</Label>
-                    <Input
-                      value={form.engineer_sign || ''}
-                      onChange={(e) => setForm({ ...form, engineer_sign: e.target.value })}
-                      placeholder="Engineer Name"
-                    />
-                  </div>
-                  <div className="space-y-2">
-                    <Label>Client Sign-off</Label>
-                    <Input
-                      value={form.client_sign || ''}
-                      onChange={(e) => setForm({ ...form, client_sign: e.target.value })}
-                      placeholder="Client Representative Name"
-                    />
-                  </div>
-                </div>
+              <div className="space-y-2">
+                <Label>Serial / Chassis No.</Label>
+                <Input value={form.serial_chassis || ''} onChange={(e) => setForm({ ...form, serial_chassis: e.target.value })} />
               </div>
-            </TabsContent>
-          </Tabs>
+              <div className="space-y-2">
+                <Label>Horometer / KM</Label>
+                <Input value={form.hour_km_actual || ''} onChange={(e) => setForm({ ...form, hour_km_actual: e.target.value })} placeholder="Ex: 1250 H" />
+              </div>
+              <div className="space-y-2">
+                <Label>Technician / Receptionist</Label>
+                <Input value={form.technician_receptionist || form.assigned_technician || ''} onChange={(e) => setForm({ ...form, technician_receptionist: e.target.value, assigned_technician: e.target.value })} />
+              </div>
+              <div className="space-y-2">
+                <Label>Status</Label>
+                <Select value={form.status || 'open'} onValueChange={(v) => setForm({ ...form, status: v as WorkOrderStatus })}>
+                  <SelectTrigger><SelectValue /></SelectTrigger>
+                  <SelectContent>
+                    {STATUSES.map((s) => <SelectItem key={s.value} value={s.value}>{s.label}</SelectItem>)}
+                  </SelectContent>
+                </Select>
+              </div>
+            </div>
 
-          <DialogFooter className="mt-4">
-            <Button type="button" variant="outline" onClick={() => setDialogOpen(false)} disabled={saving}>
-              Cancel
-            </Button>
-            <Button type="button" onClick={handleSave} disabled={saving}>
-              {saving ? <Loader2 className="w-4 h-4 animate-spin mr-1" /> : null}
-              {saving ? 'Saving...' : editing ? 'Save Changes' : 'Create Work Order'}
+            <div className="space-y-2">
+              <Label>Exit Observations / Additional Notes</Label>
+              <Textarea value={form.exit_observations || ''} onChange={(e) => setForm({ ...form, exit_observations: e.target.value })} rows={3} placeholder="Write exit notes or general observations..." />
+            </div>
+          </div>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setDialogOpen(false)}>Cancel</Button>
+            <Button onClick={handleSave} disabled={isSaving}>
+              {isSaving && <Loader2 className="w-4 h-4 mr-2 animate-spin" />}
+              {editing ? 'Save Changes' : 'Create Work Order'}
             </Button>
           </DialogFooter>
         </DialogContent>
       </Dialog>
 
-      {/* Confirm Delete Dialog */}
+      {/* Modal Detalhes */}
+      <Dialog open={!!detailWO} onOpenChange={(open) => !open && setDetailWO(null)}>
+        <DialogContent className="max-w-2xl max-h-[90vh] overflow-y-auto">
+          {detailWO && (
+            <>
+              <DialogHeader>
+                <DialogTitle className="flex items-center gap-2">
+                  {detailWO.number}
+                  <StatusBadge status={detailWO.status} label={WORK_ORDER_STATUS_LABELS[detailWO.status]} />
+                </DialogTitle>
+                <DialogDescription>
+                  Technician: {detailWO.assigned_technician || detailWO.technician_receptionist || 'N/A'} · Entry: {detailWO.entry_date || 'N/A'}
+                </DialogDescription>
+              </DialogHeader>
+              <div className="space-y-4 py-4">
+                <div className="grid grid-cols-2 gap-3 text-sm p-3 bg-muted/40 rounded-lg">
+                  <div><span className="text-muted-foreground">Client:</span> <span className="font-medium">{detailWO.client_project || '—'}</span></div>
+                  <div><span className="text-muted-foreground">Chassis/Serial:</span> <span className="font-medium">{detailWO.serial_chassis || '—'}</span></div>
+                  <div><span className="text-muted-foreground">Horometer:</span> <span className="font-medium">{detailWO.hour_km_actual || '—'}</span></div>
+                  <div><span className="text-muted-foreground">Entry Date:</span> <span className="font-medium">{detailWO.entry_date || '—'}</span></div>
+                </div>
+
+                {detailWO.exit_observations && (
+                  <div className="space-y-1">
+                    <Label className="text-xs text-muted-foreground">Exit Observations</Label>
+                    <p className="text-sm p-3 bg-muted/20 border rounded-md whitespace-pre-line">{detailWO.exit_observations}</p>
+                  </div>
+                )}
+
+                <div className="flex flex-wrap gap-2 pt-2 border-t">
+                  <Button size="sm" variant="outline" onClick={() => handlePreview(detailWO)}><Eye className="w-4 h-4 mr-1" />Preview PDF</Button>
+                  <Button size="sm" variant="outline" onClick={() => handleDownload(detailWO)}><Printer className="w-4 h-4 mr-1" />Download PDF</Button>
+                  <Button size="sm" onClick={() => handleSaveAndUpload(detailWO)}><FileText className="w-4 h-4 mr-1" />Save to Documents</Button>
+                </div>
+              </div>
+            </>
+          )}
+        </DialogContent>
+      </Dialog>
+
       <ConfirmDialog
         open={!!deleteId}
         onOpenChange={(open) => !open && setDeleteId(null)}
         onConfirm={handleDelete}
         title="Delete Work Order"
-        description="Are you sure you want to permanently delete this work order? This action cannot be undone."
+        description="This action is permanent and will delete this Work Order."
         confirmLabel="Delete"
         destructive
       />
