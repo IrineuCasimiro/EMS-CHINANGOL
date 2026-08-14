@@ -24,7 +24,7 @@ import { previewPDF, downloadPDF, usePdfGenerator } from '@/lib/pdf';
 import type { WorkOrder, WorkOrderStatus, Equipment, PartsRequisitionItem } from '@/types';
 import { useToast } from '@/hooks/use-toast';
 
-// --- GERADOR CORRIGIDO E SEM SOBREPOSIÇÃO DE TEXTO ---
+// --- GERADOR DE PDF FIEL AO MODELO CHINANGOL, LDA / SANY DEPARTMENT ---
 export const generateWorkOrderPDF = (
   wo: WorkOrder,
   equipment?: Equipment,
@@ -39,38 +39,38 @@ export const generateWorkOrderPDF = (
 
   const pageWidth = doc.internal.pageSize.getWidth(); // 210mm
   const margin = 12;
-  const contentWidth = pageWidth - margin * 2;
+  const contentWidth = pageWidth - margin * 2; // 186mm
   let y = 12;
 
   // --- CABEÇALHO PRINCIPAL ---
   doc.setFont('helvetica', 'bold');
-  doc.setFontSize(15);
+  doc.setFontSize(14);
   doc.setTextColor(0, 0, 0);
-  doc.text('CHINANGOL, LDA', margin, y);
+  doc.text('CHINANGOL, LDA', margin, y + 2);
 
   doc.setFontSize(9);
   doc.setTextColor(218, 41, 28); // Vermelho SANY
-  doc.text('SANY DEPARTMENT', margin, y + 4.5);
+  doc.text('SANY DEPARTMENT', margin, y + 7);
 
   // Título da Ordem no canto direito
   doc.setFont('helvetica', 'bold');
   doc.setFontSize(11);
   doc.setTextColor(0, 0, 0);
-  doc.text('FOLHA DE OBRA / ORDEM DE', pageWidth - margin, y, { align: 'right' });
-  doc.text('SERVIÇO', pageWidth - margin, y + 4.5, { align: 'right' });
+  doc.text('FOLHA DE OBRA / ORDEM DE', pageWidth - margin, y + 1, { align: 'right' });
+  doc.text('SERVIÇO', pageWidth - margin, y + 5.5, { align: 'right' });
 
   // Caixa de destaque para o Número da OS
-  const boxWidth = 48;
+  const boxWidth = 46;
   const boxHeight = 7.5;
   const boxX = pageWidth - margin - boxWidth;
-  const boxY = y + 7;
+  const boxY = y + 7.5;
 
   doc.setDrawColor(218, 41, 28);
   doc.setLineWidth(0.8);
   doc.rect(boxX, boxY, boxWidth, boxHeight);
 
   doc.setFont('helvetica', 'bold');
-  doc.setFontSize(10.5);
+  doc.setFontSize(10);
   doc.setTextColor(218, 41, 28);
   doc.text(`Nº ${wo.number || 'OS-2026-A001'}`, boxX + boxWidth / 2, boxY + 5.2, { align: 'center' });
 
@@ -82,12 +82,12 @@ export const generateWorkOrderPDF = (
     doc.rect(margin, currentY, contentWidth, 5.5, 'F');
 
     doc.setFillColor(218, 41, 28);
-    doc.rect(margin, currentY, 2, 5.5, 'F');
+    doc.rect(margin, currentY, 2.5, 5.5, 'F');
 
     doc.setFont('helvetica', 'bold');
     doc.setFontSize(8.5);
     doc.setTextColor(255, 255, 255);
-    doc.text(title, margin + 4, currentY + 3.9);
+    doc.text(title, margin + 4, currentY + 3.8);
 
     return currentY + 5.5;
   };
@@ -95,15 +95,14 @@ export const generateWorkOrderPDF = (
   // --- SEÇÃO 1: IDENTIFICAÇÃO DO EQUIPAMENTO & CLIENTE ---
   y = drawSectionHeader('1. IDENTIFICAÇÃO DO EQUIPAMENTO & CLIENTE', y);
 
-  const eqCode = equipment ? `${equipment.code || ''} ${equipment.name || ''}`.trim() : 'N/A';
+  const eqCode = equipment ? `${equipment.code || ''} ${equipment.name || ''}`.trim() : '';
   const eqModel = equipment ? equipment.model || '' : '';
   const serialNo = wo.serial_chassis || equipment?.serial_number || '';
   const entryDate = wo.entry_date || wo.start_date || '';
-  const horometer = wo.hour_km_actual ? `${wo.hour_km_actual} H` : equipment?.horometer ? `${equipment.horometer} H` : '';
+  const horometer = wo.hour_km_actual ? `${wo.hour_km_actual}` : equipment?.horometer ? `${equipment.horometer} H` : '';
   const clientProject = wo.client_project || '';
   const receptionist = wo.technician_receptionist || wo.assigned_technician || '';
 
-  // Tabela sem mistura de head/body para EVITAR SOBREPOSIÇÃO
   autoTable(doc, {
     startY: y,
     margin: { left: margin, right: margin },
@@ -111,11 +110,12 @@ export const generateWorkOrderPDF = (
     theme: 'grid',
     styles: {
       fontSize: 7.5,
-      cellPadding: 2,
+      cellPadding: 1.5,
       textColor: [0, 0, 0],
       lineColor: [160, 200, 230],
       lineWidth: 0.3,
       font: 'helvetica',
+      minCellHeight: 9,
     },
     columnStyles: {
       0: { cellWidth: contentWidth * 0.25, halign: 'center' },
@@ -125,18 +125,16 @@ export const generateWorkOrderPDF = (
     },
     body: [
       [
-        { content: 'ID DO EQUIPAMENTO', fontStyle: 'bold', fillColor: [240, 245, 250] },
-        { content: 'MODELO', fontStyle: 'bold', fillColor: [240, 245, 250] },
-        { content: 'No DE SÉRIE / CHASSI', fontStyle: 'bold', fillColor: [240, 245, 250] },
-        { content: 'DATA DE ENTRADA', fontStyle: 'bold', fillColor: [240, 245, 250] },
+        { content: 'ID DO EQUIPAMENTO\n' + eqCode, halign: 'center' },
+        { content: 'MODELO\n' + eqModel, halign: 'center' },
+        { content: 'No DE SÉRIE / CHASSI\n' + serialNo, halign: 'center' },
+        { content: 'DATA DE ENTRADA\n' + entryDate, halign: 'center' },
       ],
-      [eqCode, eqModel, serialNo, entryDate],
       [
-        { content: 'HORÍMETRO / KM ATUAL', fontStyle: 'bold', fillColor: [240, 245, 250] },
-        { content: 'CLIENTE / PROJECTO', fontStyle: 'bold', fillColor: [240, 245, 250] },
-        { content: 'TÉCNICO / RECEPCIONISTA', fontStyle: 'bold', fillColor: [240, 245, 250], colSpan: 2 },
+        { content: 'HORÍMETRO / KM ATUAL\n' + horometer, halign: 'center' },
+        { content: 'CLIENTE / PROJECTO\n' + clientProject, halign: 'center' },
+        { content: 'TÉCNICO / RECEPCIONISTA\n' + receptionist, colSpan: 2, halign: 'center' },
       ],
-      [horometer, clientProject, { content: receptionist, colSpan: 2 }],
     ],
   });
 
@@ -145,9 +143,10 @@ export const generateWorkOrderPDF = (
   // --- SEÇÃO 2: DIAGNÓSTICO TÉCNICO & TRABALHOS SOLICITADOS ---
   y = drawSectionHeader('2. DIAGNÓSTICO TÉCNICO & TRABALHOS SOLICITADOS', y);
 
-  const diagHeight = 26;
+  const diagHeight = 28;
   doc.setDrawColor(160, 200, 230);
   doc.setLineWidth(0.3);
+  doc.setFillColor(255, 255, 255);
   doc.rect(margin, y, contentWidth, diagHeight);
 
   doc.setFont('helvetica', 'normal');
@@ -157,7 +156,7 @@ export const generateWorkOrderPDF = (
   const diagLines = wo.diagnosis_lines || [];
   for (let i = 0; i < 6; i++) {
     const lineText = diagLines[i]?.text || '';
-    const lineY = y + 4 + i * 4;
+    const lineY = y + 4.2 + i * 4.2;
     doc.text(`${i + 1} - ${lineText}`, margin + 3, lineY);
   }
 
@@ -166,7 +165,7 @@ export const generateWorkOrderPDF = (
   // --- SEÇÃO 3: INSPECÇÃO E CHECKLIST DE ENTRADA ---
   y = drawSectionHeader('3. INSPECÇÃO E CHECKLIST DE ENTRADA', y);
 
-  const checklistHeight = 25;
+  const checklistHeight = 26;
   doc.setDrawColor(160, 200, 230);
   doc.rect(margin, y, contentWidth, checklistHeight);
 
@@ -175,25 +174,29 @@ export const generateWorkOrderPDF = (
 
   const getCheckSymbol = (labelSubstring: string) => {
     const item = wo.entry_checklist?.find((c) => c.label.toLowerCase().includes(labelSubstring.toLowerCase()));
-    return item?.checked ? '[X]' : '[  ]';
+    return item?.checked ? ' [X]' : '  o';
   };
 
+  doc.setFont('helvetica', 'normal');
   doc.setFontSize(7.5);
+  doc.setTextColor(0, 0, 0);
+
   // Coluna 1
-  doc.text(`Nível de Óleo do Motor (OK / Repor) ${getCheckSymbol('motor')}`, col1X, y + 4.2);
-  doc.text(`Nível de Óleo Hidráulico (OK / Repor) ${getCheckSymbol('hidráulico')}`, col1X, y + 8.7);
-  doc.text(`Líquido de Refrigeração (Radiador) ${getCheckSymbol('radiador')}`, col1X, y + 13.2);
-  doc.text(`Filtros de Ar e Combustível (Estado) ${getCheckSymbol('filtros')}`, col1X, y + 17.7);
-  doc.text(`Estado das Lagartas / Pneus e Aperto ${getCheckSymbol('pneus')}`, col1X, y + 22.2);
+  doc.text(`Nível de Óleo do Motor (OK / Repor)${getCheckSymbol('motor')}`, col1X, y + 4.5);
+  doc.text(`Nível de Óleo Hidráulico (OK / Repor)${getCheckSymbol('hidráulico')}`, col1X, y + 9.0);
+  doc.text(`Líquido de Refrigeração (Radiador)${getCheckSymbol('radiador')}`, col1X, y + 13.5);
+  doc.text(`Filtros de Ar e Combustível (Estado)${getCheckSymbol('filtros')}`, col1X, y + 18.0);
+  doc.text(`Estado das Lagartas / Pneus e Aperto${getCheckSymbol('pneus')}`, col1X, y + 22.5);
 
   // Coluna 2
-  doc.text(`Sistema Elétrico, Luzes e Faróis ${getCheckSymbol('elétrico')}`, col2X, y + 4.2);
-  doc.text(`Vidros, Espelhos e Cabine do Operador ${getCheckSymbol('vidros')}`, col2X, y + 8.7);
-  doc.text(`Dispositivos de Segurança / Extintor ${getCheckSymbol('segurança')}`, col2X, y + 13.2);
+  doc.text(`Sistema Elétrico, Luzes e Faróis${getCheckSymbol('elétrico')}`, col2X, y + 4.5);
+  doc.text(`Vidros, Espelhos e Cabine do Operador${getCheckSymbol('vidros')}`, col2X, y + 9.0);
+  doc.text(`Dispositivos de Segurança / Extintor${getCheckSymbol('extintor')}`, col2X, y + 13.5);
+  doc.text(`Dispositivos de Segurança / Extintor${getCheckSymbol('segurança')}`, col2X, y + 18.0);
 
   // Nível de combustível
   doc.setFont('helvetica', 'bold');
-  doc.text('NÍVEL COMBUSTÍVEL: E  [  ]  1/4  [  ]  1/2  [  ]  3/4  [  ]  F  [  ]', col2X, y + 22.2);
+  doc.text('NÍVEL COMBUSTÍVEL: E  ⊔  1/4  ⊔  1/2  ⊔  3/4  ⊔  F  ⊔', col2X, y + 22.5);
 
   y += checklistHeight + 3;
 
@@ -206,7 +209,7 @@ export const generateWorkOrderPDF = (
     ? requisitionItems.map((item) => [item.part_number || '', item.description || '', item.quantity_requested?.toString() || '1'])
     : [];
 
-  while (partsData.length < 5) {
+  while (partsData.length < 6) {
     partsData.push(['', '', '']);
   }
 
@@ -221,9 +224,10 @@ export const generateWorkOrderPDF = (
       textColor: [0, 0, 0],
       lineColor: [160, 200, 230],
       lineWidth: 0.3,
+      font: 'helvetica',
     },
     headStyles: {
-      fillColor: [75, 165, 220],
+      fillColor: [70, 160, 215], // Tom azul do modelo fornecido
       textColor: [255, 255, 255],
       fontStyle: 'bold',
       halign: 'center',
@@ -231,7 +235,7 @@ export const generateWorkOrderPDF = (
     columnStyles: {
       0: { cellWidth: 50, halign: 'center' },
       1: { cellWidth: 'auto', halign: 'left' },
-      2: { cellWidth: 40, halign: 'center' },
+      2: { cellWidth: 45, halign: 'center' },
     },
     head: [['REFERÊNCIA', 'DESCRIÇÃO DA PEÇA', 'QUANTIDADE']],
     body: partsData,
@@ -242,7 +246,7 @@ export const generateWorkOrderPDF = (
   // --- SEÇÃO 5: OBSERVAÇÕES DE SAÍDA / NOTAS ADICIONAIS ---
   y = drawSectionHeader('5. OBSERVAÇÕES DE SAÍDA / NOTAS ADICIONAIS', y);
 
-  const obsHeight = 22;
+  const obsHeight = 24;
   doc.setDrawColor(160, 200, 230);
   doc.rect(margin, y, contentWidth, obsHeight);
 
@@ -255,14 +259,14 @@ export const generateWorkOrderPDF = (
 
   for (let i = 0; i < 5; i++) {
     const lineText = obsLines[i] || '';
-    const lineY = y + 4 + i * 4;
+    const lineY = y + 4.2 + i * 4.2;
     doc.text(`${i + 1} - ${lineText}`, margin + 3, lineY);
   }
 
-  y += obsHeight + 18;
+  y += obsHeight + 16;
 
   // --- ASSINATURAS ---
-  const sigWidth = 52;
+  const sigWidth = 50;
   const gap = (contentWidth - sigWidth * 3) / 2;
 
   const sig1X = margin;
@@ -270,7 +274,7 @@ export const generateWorkOrderPDF = (
   const sig3X = sig2X + sigWidth + gap;
 
   doc.setDrawColor(0, 0, 0);
-  doc.setLineWidth(0.4);
+  doc.setLineWidth(0.5);
 
   doc.line(sig1X, y, sig1X + sigWidth, y);
   doc.line(sig2X, y, sig2X + sigWidth, y);
@@ -287,7 +291,7 @@ export const generateWorkOrderPDF = (
   return doc;
 };
 
-// --- COMPONENTE PRINCIPAL ---
+// --- COMPONENTE PRINCIPAL WORKORDERS PAGE ---
 const STATUSES: { value: WorkOrderStatus; label: string }[] = [
   { value: 'draft', label: 'Draft' },
   { value: 'open', label: 'Open' },
