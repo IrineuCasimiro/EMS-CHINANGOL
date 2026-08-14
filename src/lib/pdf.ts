@@ -1,4 +1,5 @@
 import { jsPDF } from 'jspdf';
+import autoTable from 'jspdf-autotable';
 import { supabase } from '@/lib/supabase';
 import { useData } from '@/contexts/DataContext';
 import type { WorkOrder, TravelLog, Inspection, Equipment, WorkOrderLabor, PartsRequisition, PartsRequisitionItem, FuelLevel } from '@/types';
@@ -83,148 +84,260 @@ function checkPageBreak(doc: jsPDF, y: number, needed = 20): number {
   return y;
 }
 
-// ============ WORK ORDER PDF ============
+// ============ WORK ORDER PDF (MODELO EXATO DA IMAGEM) ============
 export function generateWorkOrderPDF(
   wo: WorkOrder,
   equipment: Equipment | undefined,
-  _laborEntries: WorkOrderLabor[],
-  _items: PartsRequisitionItem[]
+  _laborEntries: WorkOrderLabor[] = [],
+  requisitionItems: PartsRequisitionItem[] = []
 ): jsPDF {
-  const doc = new jsPDF();
-  header(doc, 'Folha de Obra', 'Maintenance Work Order', wo.number);
-
-  let y = 38;
-
-  // Identification
-  y = sectionTitle(doc, y, 'Identificação');
-  y = infoRow(doc, y, 'N° OS:', wo.number);
-  y = infoRow(doc, y, 'Equipamento:', equipment?.name || '—');
-  y = infoRow(doc, y, 'Modelo:', equipment?.model || '—');
-  y = infoRow(doc, y, 'N° Série/Chassi:', wo.serial_chassis || equipment?.serial_number || '—');
-  y = infoRow(doc, y, 'Data de Entrada:', formatDate(wo.entry_date));
-  y = infoRow(doc, y, 'Horímetro/KM:', wo.hour_km_actual || '—');
-  y = infoRow(doc, y, 'Cliente/Projecto:', wo.client_project || '—');
-  y = infoRow(doc, y, 'Técnico/Recepcionista:', wo.technician_receptionist || '—');
-  y += 3;
-
-  // Work Order Details
-  y = checkPageBreak(doc, y, 25);
-  y = sectionTitle(doc, y, 'Work Order Details');
-  y = infoRow(doc, y, 'Type:', wo.type.replace(/_/g, ' '));
-  y = infoRow(doc, y, 'Status:', WORK_ORDER_STATUS_LABELS[wo.status]);
-  y = infoRow(doc, y, 'Priority:', wo.priority.toUpperCase());
-  y = infoRow(doc, y, 'Description:', wo.description || '—', 35);
-  y += 3;
-
-  // Diagnosis lines
-  if (wo.diagnosis_lines && wo.diagnosis_lines.length > 0) {
-    y = checkPageBreak(doc, y, 25);
-    y = sectionTitle(doc, y, 'Diagnóstico Técnico & Trabalhos Solicitados');
-    doc.setFontSize(9);
-    doc.setTextColor(...DARK_COLOR);
-    wo.diagnosis_lines.forEach((line, idx) => {
-      y = checkPageBreak(doc, y, 8);
-      if (line.text) {
-        doc.setFont('helvetica', 'bold');
-        doc.setTextColor(...MUTED_COLOR);
-        doc.text(`${idx + 1}.`, MARGIN, y);
-        doc.setFont('helvetica', 'normal');
-        doc.setTextColor(...DARK_COLOR);
-        const lines = doc.splitTextToSize(line.text, CONTENT_W - 8);
-        doc.text(lines, MARGIN + 8, y);
-        y += Math.max(5, lines.length * 4.5) + 1;
-      }
-    });
-    y += 3;
-  }
-
-  // Entry Checklist
-  if (wo.entry_checklist && wo.entry_checklist.length > 0) {
-    y = checkPageBreak(doc, y, 30);
-    y = sectionTitle(doc, y, 'Checklist de Entrada');
-    doc.setFontSize(8);
-    wo.entry_checklist.forEach((item) => {
-      y = checkPageBreak(doc, y, 7);
-      doc.setFont('helvetica', 'bold');
-      doc.setTextColor(item.checked ? 22 : 220, item.checked ? 163 : 38, item.checked ? 74 : 38);
-      doc.text(item.checked ? 'YES' : 'NO', MARGIN, y);
-      doc.setFont('helvetica', 'normal');
-      doc.setTextColor(...DARK_COLOR);
-      doc.text(item.label, MARGIN + 12, y);
-      y += 5.5;
-    });
-    y += 3;
-  }
-
-  // Fuel level
-  y = checkPageBreak(doc, y, 12);
-  y = infoRow(doc, y, 'Nível Combustível:', wo.work_performed || '—', 50);
-  y += 3;
-
-  // Parts replaced
-  if (wo.parts_replaced && wo.parts_replaced.length > 0) {
-    y = checkPageBreak(doc, y, 25);
-    y = sectionTitle(doc, y, 'Peças Necessárias / Substituídas');
-    doc.setFillColor(...LIGHT_BG);
-    doc.rect(MARGIN, y - 4, CONTENT_W, 7, 'F');
-    doc.setFont('helvetica', 'bold');
-    doc.setFontSize(8);
-    doc.setTextColor(...DARK_COLOR);
-    doc.text('Referência', MARGIN + 2, y + 0.5);
-    doc.text('Descrição da Peça', MARGIN + 50, y + 0.5);
-    doc.text('Qtd', MARGIN + 165, y + 0.5);
-    y += 6;
-    doc.setFont('helvetica', 'normal');
-    wo.parts_replaced.forEach((part) => {
-      y = checkPageBreak(doc, y, 8);
-      doc.text(part.reference || '—', MARGIN + 2, y);
-      const descLines = doc.splitTextToSize(part.description || '', 110);
-      doc.text(descLines, MARGIN + 50, y);
-      doc.text(String(part.quantity), MARGIN + 165, y);
-      y += Math.max(5, descLines.length * 4) + 1;
-    });
-    y += 4;
-  }
-
-  // Exit observations
-  if (wo.exit_observations) {
-    y = checkPageBreak(doc, y, 20);
-    y = sectionTitle(doc, y, 'Observações de Saída');
-    y = infoRow(doc, y, 'Notes:', wo.exit_observations, 25);
-    y += 3;
-  }
-
-  // Signatures
-  y = checkPageBreak(doc, y, 35);
-  y += 8;
-  doc.setFont('helvetica', 'bold');
-  doc.setFontSize(9);
-  doc.setTextColor(...MUTED_COLOR);
-  doc.text('Assinaturas:', MARGIN, y);
-  y += 10;
-  const sigW = (CONTENT_W - 10) / 3;
-  doc.setDrawColor(...BORDER_COLOR);
-  doc.setLineWidth(0.3);
-  const sigPositions = [
-    { label: 'Mecânico/Técnico', value: wo.mechanic_sign, x: MARGIN },
-    { label: 'Engenheiro', value: wo.engineer_sign, x: MARGIN + sigW + 5 },
-    { label: 'Cliente', value: wo.client_sign, x: MARGIN + (sigW + 5) * 2 },
-  ];
-  sigPositions.forEach((sig) => {
-    doc.line(sig.x, y, sig.x + sigW - 5, y);
-    doc.setFont('helvetica', 'normal');
-    doc.setFontSize(7);
-    doc.setTextColor(...MUTED_COLOR);
-    doc.text(sig.label, sig.x, y + 5);
-    if (sig.value) {
-      doc.setFont('helvetica', 'italic');
-      doc.setFontSize(9);
-      doc.setTextColor(...DARK_COLOR);
-      doc.text(sig.value, sig.x + 2, y - 1);
-    }
+  const doc = new jsPDF({
+    orientation: 'portrait',
+    unit: 'mm',
+    format: 'a4',
   });
 
-  footer(doc);
+  const margin = 10;
+  const contentWidth = PAGE_W - margin * 2; // 190mm
+  let y = 10;
+
+  // --- CABEÇALHO ---
+  doc.setFont('helvetica', 'bold');
+  doc.setFontSize(14);
+  doc.setTextColor(0, 0, 0);
+  doc.text('CHINANGOL, LDA', margin, y + 4);
+
+  doc.setFontSize(8.5);
+  doc.setTextColor(218, 41, 28); // Vermelho SANY
+  doc.text('SANY DEPARTMENT', margin, y + 8.5);
+
+  // Título à direita
+  doc.setFont('helvetica', 'bold');
+  doc.setFontSize(10.5);
+  doc.setTextColor(0, 0, 0);
+  doc.text('FOLHA DE OBRA / ORDEM DE', PAGE_W - margin, y + 3, { align: 'right' });
+  doc.text('SERVIÇO', PAGE_W - margin, y + 7.5, { align: 'right' });
+
+  // Caixa Vermelha do Número da OS
+  const boxWidth = 45;
+  const boxHeight = 7;
+  const boxX = PAGE_W - margin - boxWidth;
+  const boxY = y + 10;
+
+  doc.setDrawColor(218, 41, 28);
+  doc.setLineWidth(0.8);
+  doc.rect(boxX, boxY, boxWidth, boxHeight);
+
+  doc.setFont('helvetica', 'bold');
+  doc.setFontSize(10);
+  doc.setTextColor(218, 41, 28);
+  doc.text(`Nº ${wo.number || 'OS-2026-A001'}`, boxX + boxWidth / 2, boxY + 4.8, { align: 'center' });
+
+  y += 20;
+
+  // Função para desenhar as barras pretas com detalhe vermelho
+  const drawSectionHeader = (title: string, currentY: number) => {
+    doc.setFillColor(0, 0, 0);
+    doc.rect(margin, currentY, contentWidth, 5, 'F');
+
+    doc.setFillColor(218, 41, 28);
+    doc.rect(margin, currentY, 1.8, 5, 'F');
+
+    doc.setFont('helvetica', 'bold');
+    doc.setFontSize(8);
+    doc.setTextColor(255, 255, 255);
+    doc.text(title, margin + 3.5, currentY + 3.5);
+
+    return currentY + 5;
+  };
+
+  // --- 1. IDENTIFICAÇÃO DO EQUIPAMENTO & CLIENTE ---
+  y = drawSectionHeader('1. IDENTIFICAÇÃO DO EQUIPAMENTO & CLIENTE', y);
+
+  const eqCode = equipment ? `${equipment.code || ''} ${equipment.name || ''}`.trim() : '';
+  const eqModel = equipment?.model || '';
+  const serialNo = wo.serial_chassis || equipment?.serial_number || '';
+  const entryDate = formatDate(wo.entry_date) || '';
+  const horometer = wo.hour_km_actual ? `${wo.hour_km_actual}` : equipment?.horometer ? `${equipment.horometer} H` : '';
+  const clientProject = wo.client_project || '';
+  const receptionist = wo.technician_receptionist || '';
+
+  autoTable(doc, {
+    startY: y,
+    margin: { left: margin, right: margin },
+    tableWidth: contentWidth,
+    theme: 'grid',
+    styles: {
+      fontSize: 7,
+      cellPadding: 1.5,
+      textColor: [0, 0, 0],
+      lineColor: [160, 200, 230],
+      lineWidth: 0.2,
+      font: 'helvetica',
+      minCellHeight: 6,
+    },
+    columnStyles: {
+      0: { cellWidth: contentWidth * 0.25, halign: 'center' },
+      1: { cellWidth: contentWidth * 0.25, halign: 'center' },
+      2: { cellWidth: contentWidth * 0.25, halign: 'center' },
+      3: { cellWidth: contentWidth * 0.25, halign: 'center' },
+    },
+    body: [
+      [
+        { content: 'ID DO EQUIPAMENTO', fontStyle: 'bold' },
+        { content: 'MODELO', fontStyle: 'bold' },
+        { content: 'No DE SÉRIE / CHASSI', fontStyle: 'bold' },
+        { content: 'DATA DE ENTRADA', fontStyle: 'bold' },
+      ],
+      [eqCode, eqModel, serialNo, entryDate],
+      [
+        { content: 'HORÍMETRO / KM ATUAL', fontStyle: 'bold' },
+        { content: 'CLIENTE / PROJECTO', fontStyle: 'bold' },
+        { content: 'TÉCNICO / RECEPCIONISTA', fontStyle: 'bold', colSpan: 2 },
+      ],
+      [horometer, clientProject, { content: receptionist, colSpan: 2 }],
+    ],
+  });
+
+  y = (doc as any).lastAutoTable.finalY + 2.5;
+
+  // --- 2. DIAGNÓSTICO TÉCNICO & TRABALHOS SOLICITADOS ---
+  y = drawSectionHeader('2. DIAGNÓSTICO TÉCNICO & TRABALHOS SOLICITADOS', y);
+
+  const diagHeight = 24;
+  doc.setDrawColor(160, 200, 230);
+  doc.setLineWidth(0.2);
+  doc.rect(margin, y, contentWidth, diagHeight);
+
+  doc.setFont('helvetica', 'normal');
+  doc.setFontSize(7.5);
+  doc.setTextColor(0, 0, 0);
+
+  const diagLines = wo.diagnosis_lines || [];
+  for (let i = 0; i < 6; i++) {
+    const lineText = diagLines[i]?.text || '';
+    doc.text(`${i + 1} - ${lineText}`, margin + 2.5, y + 3.8 + i * 3.8);
+  }
+
+  y += diagHeight + 2.5;
+
+  // --- 3. INSPECÇÃO E CHECKLIST DE ENTRADA ---
+  y = drawSectionHeader('3. INSPECÇÃO E CHECKLIST DE ENTRADA', y);
+
+  const checklistHeight = 22;
+  doc.setDrawColor(160, 200, 230);
+  doc.rect(margin, y, contentWidth, checklistHeight);
+
+  const col1X = margin + 2.5;
+  const col2X = margin + (contentWidth / 2) + 1;
+
+  doc.setFontSize(7);
+  doc.setFont('helvetica', 'normal');
+
+  doc.text('Nível de Óleo do Motor (OK / Repor)  o', col1X, y + 3.8);
+  doc.text('Nível de Óleo Hidráulico (OK / Repor)  o', col1X, y + 7.6);
+  doc.text('Líquido de Refrigeração (Radiador)  o', col1X, y + 11.4);
+  doc.text('Filtros de Ar e Combustível (Estado)  □', col1X, y + 15.2);
+  doc.text('Estado das Lagartas / Pneus e Aperto  ⊔', col1X, y + 19.0);
+
+  doc.text('Sistema Elétrico, Luzes e Faróis  o', col2X, y + 3.8);
+  doc.text('Vidros, Espelhos e Cabine do Operador  o', col2X, y + 7.6);
+  doc.text('Dispositivos de Segurança / Extintor  o', col2X, y + 11.4);
+  doc.text('Dispositivos de Segurança / Extintor  □', col2X, y + 15.2);
+
+  doc.setFont('helvetica', 'bold');
+  doc.text('NÍVEL COMBUSTÍVEL: E  ⊔  1/4  ⊔  1/2  ⊔  3/4  ⊔  F  ⊔', col2X, y + 19.0);
+
+  y += checklistHeight + 2.5;
+
+  // --- 4. PEÇAS NECESSÁRIAS / SUBSTITUÍDAS (PART REQUEST) ---
+  y = drawSectionHeader('4. PEÇAS NECESSÁRIAS / SUBSTITUÍDAS (PART REQUEST)', y);
+
+  const partsData = (wo.parts_replaced && wo.parts_replaced.length > 0)
+    ? wo.parts_replaced.map((p) => [p.reference || '', p.description || '', p.quantity?.toString() || ''])
+    : requisitionItems.length > 0
+    ? requisitionItems.map((item) => [item.part_number || '', item.description || '', item.quantity_requested?.toString() || ''])
+    : [];
+
+  while (partsData.length < 5) {
+    partsData.push(['', '', '']);
+  }
+
+  autoTable(doc, {
+    startY: y,
+    margin: { left: margin, right: margin },
+    tableWidth: contentWidth,
+    theme: 'grid',
+    styles: {
+      fontSize: 7.5,
+      cellPadding: 1.5,
+      textColor: [0, 0, 0],
+      lineColor: [160, 200, 230],
+      lineWidth: 0.2,
+      font: 'helvetica',
+      minCellHeight: 5,
+    },
+    headStyles: {
+      fillColor: [75, 165, 220], // Azul exato da foto
+      textColor: [255, 255, 255],
+      fontStyle: 'bold',
+      halign: 'center',
+    },
+    columnStyles: {
+      0: { cellWidth: 45, halign: 'center' },
+      1: { cellWidth: 'auto', halign: 'left' },
+      2: { cellWidth: 35, halign: 'center' },
+    },
+    head: [['REFERENCIA', 'DESCRIÇÃO DA PEÇA', 'QUANTIDADE']],
+    body: partsData,
+  });
+
+  y = (doc as any).lastAutoTable.finalY + 2.5;
+
+  // --- 5. OBSERVAÇÕES DE SAÍDA / NOTAS ADICIONAIS ---
+  y = drawSectionHeader('5. OBSERVAÇÕES DE SAÍDA / NOTAS ADICIONAIS', y);
+
+  const obsHeight = 22;
+  doc.setDrawColor(160, 200, 230);
+  doc.rect(margin, y, contentWidth, obsHeight);
+
+  doc.setFont('helvetica', 'normal');
+  doc.setFontSize(7.5);
+  doc.setTextColor(0, 0, 0);
+
+  const obsText = wo.exit_observations || '';
+  const obsLines = obsText ? obsText.split('\n') : [];
+
+  for (let i = 0; i < 5; i++) {
+    const lineText = obsLines[i] || '';
+    doc.text(`${i + 1} - ${lineText}`, margin + 2.5, y + 3.8 + i * 3.8);
+  }
+
+  y += obsHeight + 16;
+
+  // --- ASSINATURAS ---
+  const sigWidth = 50;
+  const gap = (contentWidth - sigWidth * 3) / 2;
+
+  const sig1X = margin;
+  const sig2X = sig1X + sigWidth + gap;
+  const sig3X = sig2X + sigWidth + gap;
+
+  doc.setDrawColor(0, 0, 0);
+  doc.setLineWidth(0.4);
+
+  doc.line(sig1X, y, sig1X + sigWidth, y);
+  doc.line(sig2X, y, sig2X + sigWidth, y);
+  doc.line(sig3X, y, sig3X + sigWidth, y);
+
+  doc.setFont('helvetica', 'bold');
+  doc.setFontSize(7.5);
+  doc.setTextColor(0, 0, 0);
+
+  doc.text('MECÂNICO / TECNICO', sig1X + sigWidth / 2, y + 3.5, { align: 'center' });
+  doc.text('ENGENHEIRO', sig2X + sigWidth / 2, y + 3.5, { align: 'center' });
+  doc.text('CLIENTE', sig3X + sigWidth / 2, y + 3.5, { align: 'center' });
+
   return doc;
 }
 
