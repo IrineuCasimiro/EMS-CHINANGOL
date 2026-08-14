@@ -1,7 +1,6 @@
 import { useState, useMemo } from 'react';
 import { useData } from '@/contexts/DataContext';
 import { useAuth } from '@/contexts/AuthContext';
-import { useTheme } from '@/contexts/ThemeContext';
 import { PageHeader, StatusBadge, EmptyState } from '@/components/shared';
 import { FilterBar, Pagination, StatusFilter } from '@/components/shared/table-helpers';
 import { ConfirmDialog } from '@/components/shared/dialogs';
@@ -27,7 +26,7 @@ import { generateWorkOrderPDF, previewPDF, downloadPDF } from '@/lib/pdf';
 import type { WorkOrder, WorkOrderType, WorkOrderStatus, Priority, ChecklistItem, DiagnosisLine, WorkOrderPart } from '@/types';
 import { useToast } from '@/hooks/use-toast';
 import { cn } from '@/lib/utils';
-import { supabase } from '@/lib/supabase'; // Garanta a importação direta para operações em lote de peças
+import { supabase } from '@/lib/supabase';
 
 const TYPES: { value: WorkOrderType; label: string }[] = [
   { value: 'mechanical', label: 'Mechanical' },
@@ -54,14 +53,14 @@ const PRIORITIES: { value: Priority; label: string }[] = [
 ];
 
 const ENTRY_CHECKLIST_ITEMS = [
-  'Nível Óleo Motor',
-  'Nível Óleo Hidráulico',
-  'Líquido Refrigeração',
-  'Filtros Ar/Combustível',
-  'Estado Lagartas/Pneus/Aperto',
-  'Sistema Elétrico/Luzes',
-  'Vidros/Espelhos/Cabine',
-  'Dispositivos Segurança',
+  'Engine Oil Level',
+  'Hydraulic Oil Level',
+  'Coolant / Radiator Liquid',
+  'Air / Fuel Filters State',
+  'Tracks / Tires & Tightness',
+  'Electrical System & Lights',
+  'Glass / Mirrors / Operator Cab',
+  'Safety Devices & Extinguisher',
 ];
 
 const PAGE_SIZE = 8;
@@ -76,12 +75,12 @@ function makeDiagnosisLine(text = ''): DiagnosisLine {
 }
 
 let partIdCounter = 0;
-function makePart(ref = '', desc = '', qty = 0): WorkOrderPart {
+function makePart(ref = '', desc = '', qty = 1): WorkOrderPart {
   return { id: `wp-${Date.now()}-${partIdCounter++}`, reference: ref, description: desc, quantity: qty };
 }
 
 /**
- * Higieniza apenas a tabela work_orders (sem enviar o array de peças na mesma query)
+ * Normalizes and sanitizes work order payload for Supabase insertion/update
  */
 function prepareWorkOrderPayload(data: Partial<WorkOrder>, userId?: string) {
   const cleanDiagnosis = (data.diagnosis_lines || [])
@@ -128,9 +127,8 @@ function prepareWorkOrderPayload(data: Partial<WorkOrder>, userId?: string) {
 }
 
 export function WorkOrdersPage() {
-  const { workOrders, equipment, requisitions, requisitionItems, saveWorkOrder, deleteWorkOrder, refreshData } = useData();
+  const { workOrders, equipment, requisitions, requisitionItems, saveWorkOrder, deleteWorkOrder, refresh, refreshData } = useData();
   const { profile } = useAuth();
-  const { t } = useTheme();
   const { toast } = useToast();
   const [search, setSearch] = useState('');
   const [statusFilter, setStatusFilter] = useState('all');
@@ -139,9 +137,11 @@ export function WorkOrdersPage() {
   const [deleteId, setDeleteId] = useState<string | null>(null);
   const [editing, setEditing] = useState<WorkOrder | null>(null);
   const [form, setForm] = useState<Partial<WorkOrder>>({});
-  const [detailWO, setDetailWO] = useState<WorkOrder | null>(null);
+  const [, setDetailWO] = useState<WorkOrder | null>(null);
   const [saving, setSaving] = useState(false);
   const [completingId, setCompletingId] = useState<string | null>(null);
+
+  const triggerRefresh = refresh || refreshData;
 
   const canEdit = profile?.role === 'admin' || profile?.role === 'equipment_manager' || profile?.role === 'workshop_supervisor' || profile?.role === 'user';
   const canDelete = profile?.role === 'admin' || profile?.role === 'equipment_manager';
@@ -191,7 +191,6 @@ export function WorkOrdersPage() {
   const openEdit = async (wo: WorkOrder) => {
     setEditing(wo);
 
-    // Procura as peças na tabela dedicada work_order_parts
     let currentParts = wo.parts_replaced || [];
     try {
       const { data: dbParts } = await supabase
@@ -202,7 +201,7 @@ export function WorkOrdersPage() {
         currentParts = dbParts;
       }
     } catch (e) {
-      console.warn('Não foi possível carregar peças relacionais:', e);
+      console.warn('Could not load work order parts from relational table:', e);
     }
 
     setForm({
@@ -215,32 +214,23 @@ export function WorkOrdersPage() {
   };
 
   const handleSave = async () => {
-    console.log('Iniciando salvamento da OS...', form);
-
     if (!form.equipment_id || !form.description) {
-      toast({ title: 'Equipamento e descrição são obrigatórios', variant: 'destructive' });
+      toast({ title: 'Validation Error', description: 'Equipment and Description are required fields.', variant: 'destructive' });
       return;
     }
 
     setSaving(true);
     try {
-      // 1. Prepara e salva na tabela work_orders
       const payload = prepareWorkOrderPayload(form, profile?.id);
-      console.log('Payload enviado para work_orders:', payload);
-
       const result = await saveWorkOrder(payload as any);
-      console.log('Resultado do saveWorkOrder:', result);
 
       if (result?.error) {
         throw new Error(typeof result.error === 'object' ? JSON.stringify(result.error) : String(result.error));
       }
 
-      // Descobre o ID gerado ou editado
-      const savedWoId = form.id || result?.data?.id || result?.[0]?.id;
+      const savedWoId = form.id || result?.data?.id;
 
-      // 2. Salva as peças na tabela dedicada work_order_parts (se o ID da OS existir)
       if (savedWoId && form.parts_replaced) {
-        // Limpa as peças antigas para evitar duplicidade na edição
         await supabase.from('work_order_parts').delete().eq('work_order_id', savedWoId);
 
         const partsToInsert = (form.parts_replaced || [])
@@ -253,24 +243,20 @@ export function WorkOrdersPage() {
           }));
 
         if (partsToInsert.length > 0) {
-          console.log('Inserindo peças em work_order_parts:', partsToInsert);
           const { error: partsError } = await supabase.from('work_order_parts').insert(partsToInsert);
-          if (partsError) {
-            console.error('Erro ao salvar peças:', partsError);
-          }
+          if (partsError) console.error('Error inserting parts:', partsError);
         }
       }
 
-      // Re-sincroniza os dados do estado global
-      if (refreshData) await refreshData();
+      if (triggerRefresh) await triggerRefresh();
 
-      toast({ title: editing ? 'Folha de obra atualizada' : 'Folha de obra criada com sucesso' });
+      toast({ title: 'Success', description: editing ? 'Work Order updated successfully.' : 'Work Order created successfully.' });
       setDialogOpen(false);
     } catch (err: any) {
-      console.error('ERRO FATAL AO SALVAR:', err);
+      console.error('Fatal error saving Work Order:', err);
       toast({
-        title: 'Erro ao guardar no Supabase',
-        description: err?.message || 'Verifique a consola (F12) para mais detalhes.',
+        title: 'Error Saving to Supabase',
+        description: err?.message || 'Check browser console (F12) for details.',
         variant: 'destructive',
       });
     } finally {
@@ -292,11 +278,11 @@ export function WorkOrdersPage() {
 
       if (result?.error) throw new Error(String(result.error));
 
-      if (refreshData) await refreshData();
-      toast({ title: 'Folha de Obra Finalizada', description: `OS ${wo.number} foi concluída.` });
+      if (triggerRefresh) await triggerRefresh();
+      toast({ title: 'Work Order Completed', description: `WO ${wo.number} has been closed.` });
     } catch (err: any) {
-      console.error('Erro ao finalizar OS:', err);
-      toast({ title: 'Erro inesperado', description: err?.message, variant: 'destructive' });
+      console.error('Error completing WO:', err);
+      toast({ title: 'Error Completing WO', description: err?.message, variant: 'destructive' });
     } finally {
       setCompletingId(null);
     }
@@ -308,10 +294,10 @@ export function WorkOrdersPage() {
       const { error } = await deleteWorkOrder(deleteId);
       if (error) throw new Error(String(error));
 
-      if (refreshData) await refreshData();
-      toast({ title: 'Folha de obra eliminada com sucesso' });
+      if (triggerRefresh) await triggerRefresh();
+      toast({ title: 'Work Order Deleted' });
     } catch (err: any) {
-      toast({ title: 'Erro ao eliminar', description: err?.message, variant: 'destructive' });
+      toast({ title: 'Error Deleting', description: err?.message, variant: 'destructive' });
     }
     setDeleteId(null);
   };
@@ -374,12 +360,12 @@ export function WorkOrdersPage() {
   return (
     <div>
       <PageHeader
-        title={t('workOrders')}
-        description="Gestão de folhas de obra — mecânica, hidráulica e electromecânica"
+        title="Work Orders"
+        description="Management of workshop service orders — mechanical, hydraulic, and electromechanical."
         action={canEdit && (
           <Button type="button" onClick={openCreate}>
             <Plus className="w-4 h-4 mr-1" />
-            {t('newWorkOrder')}
+            New Work Order
           </Button>
         )}
       />
@@ -387,24 +373,24 @@ export function WorkOrdersPage() {
       <FilterBar
         search={search}
         onSearchChange={(v) => { setSearch(v); setPage(1); }}
-        searchPlaceholder="Pesquisar por número, equipamento, S/N, técnico..."
+        searchPlaceholder="Search by number, equipment, serial number, technician..."
         filters={<StatusFilter value={statusFilter} onChange={(v) => { setStatusFilter(v); setPage(1); }} options={STATUSES} />}
       />
 
       <Card>
         <CardContent className="p-0">
           {paginated.length === 0 ? (
-            <EmptyState icon={<Wrench className="w-12 h-12" />} title="Nenhuma folha de obra encontrada" description="Crie a sua primeira Folha de Obra" />
+            <EmptyState icon={<Wrench className="w-12 h-12" />} title="No Work Orders Found" description="Create your first Work Order to start tracking." />
           ) : (
             <Table>
               <TableHeader>
                 <TableRow>
-                  <TableHead>{t('number')}</TableHead>
-                  <TableHead>Equipamento</TableHead>
-                  <TableHead className="hidden md:table-cell">Tipo</TableHead>
-                  <TableHead className="hidden sm:table-cell">Prioridade</TableHead>
-                  <TableHead>{t('status')}</TableHead>
-                  <TableHead className="text-right">{t('actions')}</TableHead>
+                  <TableHead>WO Number</TableHead>
+                  <TableHead>Equipment</TableHead>
+                  <TableHead className="hidden md:table-cell">Type</TableHead>
+                  <TableHead className="hidden sm:table-cell">Priority</TableHead>
+                  <TableHead>Status</TableHead>
+                  <TableHead className="text-right">Actions</TableHead>
                 </TableRow>
               </TableHeader>
               <TableBody>
@@ -415,9 +401,9 @@ export function WorkOrdersPage() {
                     <TableRow key={wo.id} className="hover:bg-muted/50 cursor-pointer" onClick={() => setDetailWO(wo)}>
                       <TableCell className="font-mono font-medium">{wo.number}</TableCell>
                       <TableCell>
-                        <div className="font-medium">{eq?.name || 'Desconhecido'}</div>
+                        <div className="font-medium">{eq?.name || 'Unknown Equipment'}</div>
                         <div className="text-xs text-muted-foreground">
-                          {eq?.serial_number ? `S/N: ${eq.serial_number} • ` : ''}{wo.assigned_technician || 'Sem técnico'}
+                          {eq?.serial_number ? `S/N: ${eq.serial_number} • ` : ''}{wo.assigned_technician || 'No Tech Assigned'}
                         </div>
                       </TableCell>
                       <TableCell className="hidden md:table-cell capitalize">{wo.type?.replace(/_/g, ' ')}</TableCell>
@@ -437,15 +423,15 @@ export function WorkOrdersPage() {
                               className="h-8 w-8 text-emerald-600 hover:text-emerald-700 hover:bg-emerald-50"
                               onClick={() => handleFinalizeWorkOrder(wo)}
                               disabled={isCompleting}
-                              title="Finalizar OS"
+                              title="Complete Work Order"
                             >
                               {isCompleting ? <Loader2 className="w-4 h-4 animate-spin" /> : <CheckCircle2 className="w-4 h-4" />}
                             </Button>
                           )}
-                          <Button type="button" variant="ghost" size="icon" className="h-8 w-8" onClick={() => handlePreview(wo)} title="Visualizar PDF">
+                          <Button type="button" variant="ghost" size="icon" className="h-8 w-8" onClick={() => handlePreview(wo)} title="Preview PDF">
                             <Eye className="w-4 h-4" />
                           </Button>
-                          <Button type="button" variant="ghost" size="icon" className="h-8 w-8" onClick={() => handleDownload(wo)} title="Imprimir / Baixar">
+                          <Button type="button" variant="ghost" size="icon" className="h-8 w-8" onClick={() => handleDownload(wo)} title="Print / Download PDF">
                             <Printer className="w-4 h-4" />
                           </Button>
                           {canEdit && (
@@ -473,34 +459,35 @@ export function WorkOrdersPage() {
         <Pagination page={page} totalPages={totalPages} onPageChange={setPage} total={filtered.length} pageSize={PAGE_SIZE} />
       )}
 
-      {/* Modal Criar / Editar */}
+      {/* Modal Create / Edit */}
       <Dialog open={dialogOpen} onOpenChange={setDialogOpen}>
         <DialogContent className="max-w-3xl max-h-[90vh] overflow-y-auto">
           <DialogHeader>
-            <DialogTitle>{editing ? 'Editar Folha de Obra' : 'Nova Folha de Obra'}</DialogTitle>
+            <DialogTitle>{editing ? 'Edit Work Order' : 'New Work Order'}</DialogTitle>
             <DialogDescription>
-              {editing ? `A atualizar os dados da folha ${editing.number}` : 'Preencha os detalhes para abrir uma nova folha de obra.'}
+              {editing ? `Updating details for ${editing.number}` : 'Fill in the details to open a new service order.'}
             </DialogDescription>
           </DialogHeader>
 
           <Tabs defaultValue="general" className="w-full py-2">
-            <TabsList className="grid w-full grid-cols-4">
-              <TabsTrigger value="general">Geral</TabsTrigger>
+            <TabsList className="grid w-full grid-cols-5">
+              <TabsTrigger value="general">General</TabsTrigger>
+              <TabsTrigger value="diagnosis">Diagnosis</TabsTrigger>
               <TabsTrigger value="checklist">Checklist</TabsTrigger>
-              <TabsTrigger value="diagnosis">Diagnóstico</TabsTrigger>
-              <TabsTrigger value="parts">Peças</TabsTrigger>
+              <TabsTrigger value="parts">Parts Required</TabsTrigger>
+              <TabsTrigger value="signoff">Sign-Off</TabsTrigger>
             </TabsList>
 
-            {/* Aba Geral */}
+            {/* General Tab */}
             <TabsContent value="general" className="space-y-4 pt-4">
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                 <div className="space-y-2">
-                  <Label>Número da OS</Label>
+                  <Label>WO Number</Label>
                   <Input value={form.number || ''} readOnly className="bg-muted font-mono" />
                 </div>
 
                 <div className="space-y-2">
-                  <Label>Equipamento *</Label>
+                  <Label>Equipment *</Label>
                   <Select
                     value={form.equipment_id || ''}
                     onValueChange={(v) => {
@@ -513,7 +500,7 @@ export function WorkOrdersPage() {
                       });
                     }}
                   >
-                    <SelectTrigger><SelectValue placeholder="Selecione um equipamento" /></SelectTrigger>
+                    <SelectTrigger><SelectValue placeholder="Select Equipment" /></SelectTrigger>
                     <SelectContent>
                       {equipment.map((e) => (
                         <SelectItem key={e.id} value={e.id}>
@@ -525,7 +512,62 @@ export function WorkOrdersPage() {
                 </div>
 
                 <div className="space-y-2">
-                  <Label>Tipo de Serviço</Label>
+                  <Label>Serial / Chassis No.</Label>
+                  <Input
+                    value={form.serial_chassis || ''}
+                    onChange={(e) => setForm({ ...form, serial_chassis: e.target.value })}
+                    placeholder="e.g. BC5260CG1383"
+                  />
+                </div>
+
+                <div className="space-y-2">
+                  <Label>Entry Date</Label>
+                  <Input
+                    type="date"
+                    value={form.entry_date || ''}
+                    onChange={(e) => setForm({ ...form, entry_date: e.target.value })}
+                  />
+                </div>
+
+                <div className="space-y-2">
+                  <Label>Current Horometer / Odometer (KM/H)</Label>
+                  <Input
+                    type="number"
+                    value={form.hour_km_actual ?? ''}
+                    onChange={(e) => setForm({ ...form, hour_km_actual: e.target.value })}
+                    placeholder="e.g. 51.3 H"
+                  />
+                </div>
+
+                <div className="space-y-2">
+                  <Label>Client / Project</Label>
+                  <Input
+                    value={form.client_project || ''}
+                    onChange={(e) => setForm({ ...form, client_project: e.target.value })}
+                    placeholder="e.g. OMATAPALO / Site A"
+                  />
+                </div>
+
+                <div className="space-y-2">
+                  <Label>Receptionist / Lead Tech</Label>
+                  <Input
+                    value={form.technician_receptionist || ''}
+                    onChange={(e) => setForm({ ...form, technician_receptionist: e.target.value })}
+                    placeholder="e.g. SACULILA"
+                  />
+                </div>
+
+                <div className="space-y-2">
+                  <Label>Assigned Mechanic</Label>
+                  <Input
+                    value={form.assigned_technician || ''}
+                    onChange={(e) => setForm({ ...form, assigned_technician: e.target.value })}
+                    placeholder="Assigned technician name"
+                  />
+                </div>
+
+                <div className="space-y-2">
+                  <Label>Service Type</Label>
                   <Select value={form.type || 'mechanical'} onValueChange={(v) => setForm({ ...form, type: v as WorkOrderType })}>
                     <SelectTrigger><SelectValue /></SelectTrigger>
                     <SelectContent>
@@ -535,7 +577,7 @@ export function WorkOrdersPage() {
                 </div>
 
                 <div className="space-y-2">
-                  <Label>Prioridade</Label>
+                  <Label>Priority</Label>
                   <Select value={form.priority || 'medium'} onValueChange={(v) => setForm({ ...form, priority: v as Priority })}>
                     <SelectTrigger><SelectValue /></SelectTrigger>
                     <SelectContent>
@@ -545,7 +587,7 @@ export function WorkOrdersPage() {
                 </div>
 
                 <div className="space-y-2">
-                  <Label>Estado</Label>
+                  <Label>Status</Label>
                   <Select value={form.status || 'open'} onValueChange={(v) => setForm({ ...form, status: v as WorkOrderStatus })}>
                     <SelectTrigger><SelectValue /></SelectTrigger>
                     <SelectContent>
@@ -553,71 +595,30 @@ export function WorkOrdersPage() {
                     </SelectContent>
                   </Select>
                 </div>
-
-                <div className="space-y-2">
-                  <Label>Técnico Atribuído</Label>
-                  <Input
-                    value={form.assigned_technician || ''}
-                    onChange={(e) => setForm({ ...form, assigned_technician: e.target.value })}
-                    placeholder="Nome do técnico principal"
-                  />
-                </div>
-
-                <div className="space-y-2">
-                  <Label>Horas / KM Atuais</Label>
-                  <Input
-                    type="number"
-                    value={form.hour_km_actual ?? ''}
-                    onChange={(e) => setForm({ ...form, hour_km_actual: e.target.value })}
-                    placeholder="Ex: 1250"
-                  />
-                </div>
-
-                <div className="space-y-2">
-                  <Label>Cliente / Projeto</Label>
-                  <Input
-                    value={form.client_project || ''}
-                    onChange={(e) => setForm({ ...form, client_project: e.target.value })}
-                    placeholder="Ex: Obra A1 ou Cliente X"
-                  />
-                </div>
               </div>
 
               <div className="space-y-2">
-                <Label>Descrição da Avaria / Pedido *</Label>
+                <Label>Fault / Maintenance Description *</Label>
                 <Textarea
                   value={form.description || ''}
                   onChange={(e) => setForm({ ...form, description: e.target.value })}
-                  placeholder="Relato de avarias, falhas ou manutenção solicitada"
+                  placeholder="Reported faults, issues, or requested service operations"
                   rows={3}
                 />
               </div>
             </TabsContent>
 
-            {/* Aba Checklist */}
-            <TabsContent value="checklist" className="space-y-4 pt-4">
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-                {(form.entry_checklist || []).map((item, idx) => (
-                  <div key={item.id || idx} className="flex items-center justify-between border p-3 rounded-lg">
-                    <span className="text-sm font-medium">{item.label}</span>
-                    <Checkbox
-                      checked={item.checked}
-                      onCheckedChange={(checked) => toggleChecklist(idx, Boolean(checked))}
-                    />
-                  </div>
-                ))}
-              </div>
-            </TabsContent>
-
-            {/* Aba Diagnóstico */}
+            {/* Diagnosis Tab */}
             <TabsContent value="diagnosis" className="space-y-4 pt-4">
+              <Label className="text-base font-semibold">2. Technical Diagnosis & Requested Tasks</Label>
               <div className="space-y-3">
                 {(form.diagnosis_lines || []).map((line, idx) => (
                   <div key={line.id || idx} className="flex items-center gap-2">
+                    <span className="text-sm font-semibold w-6">{idx + 1}.</span>
                     <Input
                       value={line.text}
                       onChange={(e) => updateDiagLine(idx, e.target.value)}
-                      placeholder={`Linha de diagnóstico ${idx + 1}`}
+                      placeholder={`Task / Diagnosis line ${idx + 1}`}
                     />
                     <Button
                       type="button"
@@ -632,13 +633,30 @@ export function WorkOrdersPage() {
                   </div>
                 ))}
                 <Button type="button" variant="outline" size="sm" onClick={addDiagLine}>
-                  <Plus className="w-4 h-4 mr-1" /> Adicionar Linha
+                  <Plus className="w-4 h-4 mr-1" /> Add Line
                 </Button>
               </div>
             </TabsContent>
 
-            {/* Aba Peças */}
+            {/* Inspection & Checklist Tab */}
+            <TabsContent value="checklist" className="space-y-4 pt-4">
+              <Label className="text-base font-semibold">3. Entry Inspection & Checklist</Label>
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                {(form.entry_checklist || []).map((item, idx) => (
+                  <div key={item.id || idx} className="flex items-center justify-between border p-3 rounded-lg">
+                    <span className="text-sm font-medium">{item.label}</span>
+                    <Checkbox
+                      checked={item.checked}
+                      onCheckedChange={(checked) => toggleChecklist(idx, Boolean(checked))}
+                    />
+                  </div>
+                ))}
+              </div>
+            </TabsContent>
+
+            {/* Parts Tab */}
             <TabsContent value="parts" className="space-y-4 pt-4">
+              <Label className="text-base font-semibold">4. Required / Replaced Parts (Part Request)</Label>
               <div className="space-y-3">
                 {(form.parts_replaced || []).map((part, idx) => (
                   <div key={part.id || idx} className="grid grid-cols-12 gap-2 items-center">
@@ -646,14 +664,14 @@ export function WorkOrdersPage() {
                       <Input
                         value={part.reference}
                         onChange={(e) => updatePart(idx, 'reference', e.target.value)}
-                        placeholder="Referência/PN"
+                        placeholder="Part Reference / P/N"
                       />
                     </div>
                     <div className="col-span-5">
                       <Input
                         value={part.description}
                         onChange={(e) => updatePart(idx, 'description', e.target.value)}
-                        placeholder="Descrição da peça"
+                        placeholder="Part Description"
                       />
                     </div>
                     <div className="col-span-2">
@@ -661,7 +679,7 @@ export function WorkOrdersPage() {
                         type="number"
                         value={part.quantity || ''}
                         onChange={(e) => updatePart(idx, 'quantity', Number(e.target.value))}
-                        placeholder="Qtd"
+                        placeholder="Qty"
                       />
                     </div>
                     <div className="col-span-1 flex justify-end">
@@ -672,32 +690,74 @@ export function WorkOrdersPage() {
                   </div>
                 ))}
                 <Button type="button" variant="outline" size="sm" onClick={addPart}>
-                  <Plus className="w-4 h-4 mr-1" /> Adicionar Peça
+                  <Plus className="w-4 h-4 mr-1" /> Add Part
                 </Button>
+              </div>
+            </TabsContent>
+
+            {/* Sign-Off Tab */}
+            <TabsContent value="signoff" className="space-y-4 pt-4">
+              <div className="space-y-4">
+                <div className="space-y-2">
+                  <Label>5. Exit Observations / Additional Notes</Label>
+                  <Textarea
+                    value={form.exit_observations || ''}
+                    onChange={(e) => setForm({ ...form, exit_observations: e.target.value })}
+                    placeholder="Enter final remarks, testing status, or exit notes..."
+                    rows={3}
+                  />
+                </div>
+
+                <div className="grid grid-cols-1 sm:grid-cols-3 gap-4 border-t pt-4">
+                  <div className="space-y-2">
+                    <Label>Mechanic / Technician Sign-off</Label>
+                    <Input
+                      value={form.mechanic_sign || ''}
+                      onChange={(e) => setForm({ ...form, mechanic_sign: e.target.value })}
+                      placeholder="Technician Name"
+                    />
+                  </div>
+                  <div className="space-y-2">
+                    <Label>Engineer / Supervisor Sign-off</Label>
+                    <Input
+                      value={form.engineer_sign || ''}
+                      onChange={(e) => setForm({ ...form, engineer_sign: e.target.value })}
+                      placeholder="Engineer Name"
+                    />
+                  </div>
+                  <div className="space-y-2">
+                    <Label>Client Sign-off</Label>
+                    <Input
+                      value={form.client_sign || ''}
+                      onChange={(e) => setForm({ ...form, client_sign: e.target.value })}
+                      placeholder="Client Representative Name"
+                    />
+                  </div>
+                </div>
               </div>
             </TabsContent>
           </Tabs>
 
           <DialogFooter className="mt-4">
             <Button type="button" variant="outline" onClick={() => setDialogOpen(false)} disabled={saving}>
-              Cancelar
+              Cancel
             </Button>
             <Button type="button" onClick={handleSave} disabled={saving}>
               {saving ? <Loader2 className="w-4 h-4 animate-spin mr-1" /> : null}
-              {saving ? 'A guardar...' : editing ? 'Guardar Alterações' : 'Criar Folha de Obra'}
+              {saving ? 'Saving...' : editing ? 'Save Changes' : 'Create Work Order'}
             </Button>
           </DialogFooter>
         </DialogContent>
       </Dialog>
 
-      {/* Confirmar Eliminação */}
+      {/* Confirm Delete Dialog */}
       <ConfirmDialog
         open={!!deleteId}
         onOpenChange={(open) => !open && setDeleteId(null)}
         onConfirm={handleDelete}
-        title="Eliminar Folha de Obra"
-        description="Esta ação removerá permanentemente a folha de obra selecionada. Ação irreversível."
-        confirmLabel="Eliminar"
+        title="Delete Work Order"
+        description="Are you sure you want to permanently delete this work order? This action cannot be undone."
+        confirmLabel="Delete"
         destructive
       />
     </div>

@@ -23,6 +23,7 @@ interface DataContextValue {
   documents: DocumentRecord[];
   loading: boolean;
   refresh: () => void;
+  refreshData: () => void;
   saveEquipment: (eq: Partial<Equipment>) => Promise<{ error: string | null; data?: Equipment }>;
   deleteEquipment: (id: string) => Promise<{ error: string | null }>;
   saveWorkOrder: (wo: Partial<WorkOrder>) => Promise<{ error: string | null; data?: WorkOrder }>;
@@ -118,12 +119,22 @@ export function DataProvider({ children }: { children: ReactNode }) {
   };
 
   const saveWorkOrder = async (wo: Partial<WorkOrder>) => {
-    const { data, error } = wo.id
-      ? await supabase.from('work_orders').update(wo).eq('id', wo.id).select().maybeSingle()
-      : await supabase.from('work_orders').insert(wo).select().maybeSingle();
-    if (error) return { error: error.message };
-    if (data && !wo.id) setWorkOrders((prev) => [data as WorkOrder, ...prev]);
+    // Purga o campo de peças temporárias da mutation de work_orders
+    // para não dar erro de coluna inexistente na tabela principal do Supabase
+    const { parts_replaced, ...woPayload } = wo as any;
+
+    const { data, error } = woPayload.id
+      ? await supabase.from('work_orders').update(woPayload).eq('id', woPayload.id).select().maybeSingle()
+      : await supabase.from('work_orders').insert(woPayload).select().maybeSingle();
+
+    if (error) {
+      console.error('Erro no Supabase (work_orders):', error);
+      return { error: error.message };
+    }
+
+    if (data && !woPayload.id) setWorkOrders((prev) => [data as WorkOrder, ...prev]);
     else if (data) setWorkOrders((prev) => prev.map((w) => (w.id === data.id ? data as WorkOrder : w)));
+
     return { error: null, data: data as WorkOrder };
   };
 
@@ -271,7 +282,9 @@ export function DataProvider({ children }: { children: ReactNode }) {
 
   const value: DataContextValue = {
     equipment, inspections, workOrders, laborEntries, travelLogs,
-    requisitions, requisitionItems, documents, loading, refresh,
+    requisitions, requisitionItems, documents, loading,
+    refresh,
+    refreshData: refresh,
     saveEquipment, deleteEquipment,
     saveWorkOrder, deleteWorkOrder,
     saveLabor, deleteLabor,
