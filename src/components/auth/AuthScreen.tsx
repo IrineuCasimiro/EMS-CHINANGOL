@@ -41,17 +41,14 @@ export function AuthScreen() {
             </div>
           </div>
           <h2 className="text-3xl xl:text-4xl font-bold mb-4 leading-tight">
-            Heavy Machinery<br />Workshop Management<br />Reimagined
+            Heavy Machinery<br />Workshop Management<br />
           </h2>
           <p className="text-white/60 text-lg mb-8 max-w-md">
             Track equipment, manage work orders, log inspections, and control parts requisitions — all from one industrial-grade platform.
           </p>
           <div className="space-y-3">
             {[
-              'Folha de Obra with printable PDF work orders',
-              'Guia de Viagem for fleet & travel tracking',
-              'Weekly inspection checklists with digital sign-off',
-              'Role-based access for your entire team',
+              'Designed and built by Irineu Casimiro.',
             ].map((feat) => (
               <div key={feat} className="flex items-center gap-3 text-white/80">
                 <div className="w-1.5 h-1.5 rounded-full bg-teal-400" />
