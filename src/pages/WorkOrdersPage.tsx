@@ -18,7 +18,7 @@ import {
 import {
   Select, SelectContent, SelectItem, SelectTrigger, SelectValue,
 } from '@/components/ui/select';
-import { Wrench, Plus, Pencil, Trash2, ChevronRight, Eye, Printer, Loader2, FileText } from 'lucide-react';
+import { Wrench, Plus, Pencil, Trash2, ChevronRight, Eye, Printer, Loader2, FileText, X } from 'lucide-react';
 import { WORK_ORDER_STATUS_LABELS, generateNumber } from '@/lib/constants';
 import { previewPDF, downloadPDF, usePdfGenerator } from '@/lib/pdf';
 import type { WorkOrder, WorkOrderStatus, Equipment, PartsRequisitionItem } from '@/types';
@@ -37,9 +37,9 @@ export const generateWorkOrderPDF = (
     format: 'a4',
   });
 
-  const pageWidth = doc.internal.pageSize.getWidth(); // 210mm
+  const pageWidth = doc.internal.pageSize.getWidth();
   const margin = 12;
-  const contentWidth = pageWidth - margin * 2; // 186mm
+  const contentWidth = pageWidth - margin * 2;
   let y = 12;
 
   // --- CABEÇALHO PRINCIPAL ---
@@ -49,17 +49,15 @@ export const generateWorkOrderPDF = (
   doc.text('CHINANGOL, LDA', margin, y + 2);
 
   doc.setFontSize(9);
-  doc.setTextColor(218, 41, 28); // Vermelho SANY
+  doc.setTextColor(218, 41, 28);
   doc.text('SANY DEPARTMENT', margin, y + 7);
 
-  // Título da Ordem no canto direito
   doc.setFont('helvetica', 'bold');
   doc.setFontSize(11);
   doc.setTextColor(0, 0, 0);
   doc.text('FOLHA DE OBRA / ORDEM DE', pageWidth - margin, y + 1, { align: 'right' });
   doc.text('SERVIÇO', pageWidth - margin, y + 5.5, { align: 'right' });
 
-  // Caixa de destaque para o Número da OS
   const boxWidth = 46;
   const boxHeight = 7.5;
   const boxX = pageWidth - margin - boxWidth;
@@ -76,47 +74,35 @@ export const generateWorkOrderPDF = (
 
   y += 18;
 
-  // Barra de título de seção (Estilo SANY/Chinangol)
   const drawSectionHeader = (title: string, currentY: number) => {
     doc.setFillColor(0, 0, 0);
     doc.rect(margin, currentY, contentWidth, 5.5, 'F');
-
     doc.setFillColor(218, 41, 28);
     doc.rect(margin, currentY, 2.5, 5.5, 'F');
-
     doc.setFont('helvetica', 'bold');
     doc.setFontSize(8.5);
     doc.setTextColor(255, 255, 255);
     doc.text(title, margin + 4, currentY + 3.8);
-
     return currentY + 5.5;
   };
 
-  // --- SEÇÃO 1: IDENTIFICAÇÃO DO EQUIPAMENTO & CLIENTE ---
+  // --- SEÇÃO 1: IDENTIFICAÇÃO ---
   y = drawSectionHeader('1. IDENTIFICAÇÃO DO EQUIPAMENTO & CLIENTE', y);
 
   const eqCode = equipment ? `${equipment.code || ''} ${equipment.name || ''}`.trim() : '';
   const eqModel = equipment ? equipment.model || '' : '';
   const serialNo = wo.serial_chassis || equipment?.serial_number || '';
-  const entryDate = wo.entry_date || wo.start_date || '';
-  const horometer = wo.hour_km_actual ? `${wo.hour_km_actual}` : equipment?.horometer ? `${equipment.horometer} H` : '';
+  const entryDate = wo.entry_date || '';
+  const horometer = wo.hour_km_actual || '';
   const clientProject = wo.client_project || '';
-  const receptionist = wo.technician_receptionist || wo.assigned_technician || '';
+  const receptionist = wo.technician_receptionist || '';
 
   autoTable(doc, {
     startY: y,
     margin: { left: margin, right: margin },
     tableWidth: contentWidth,
     theme: 'grid',
-    styles: {
-      fontSize: 7.5,
-      cellPadding: 1.5,
-      textColor: [0, 0, 0],
-      lineColor: [160, 200, 230],
-      lineWidth: 0.3,
-      font: 'helvetica',
-      minCellHeight: 9,
-    },
+    styles: { fontSize: 7.5, cellPadding: 1.5, textColor: [0, 0, 0], lineColor: [160, 200, 230], lineWidth: 0.3, font: 'helvetica', minCellHeight: 9 },
     columnStyles: {
       0: { cellWidth: contentWidth * 0.25, halign: 'center' },
       1: { cellWidth: contentWidth * 0.25, halign: 'center' },
@@ -140,9 +126,8 @@ export const generateWorkOrderPDF = (
 
   y = (doc as any).lastAutoTable.finalY + 3;
 
-  // --- SEÇÃO 2: DIAGNÓSTICO TÉCNICO & TRABALHOS SOLICITADOS ---
+  // --- SEÇÃO 2: DIAGNÓSTICO ---
   y = drawSectionHeader('2. DIAGNÓSTICO TÉCNICO & TRABALHOS SOLICITADOS', y);
-
   const diagHeight = 28;
   doc.setDrawColor(160, 200, 230);
   doc.setLineWidth(0.3);
@@ -155,16 +140,14 @@ export const generateWorkOrderPDF = (
 
   const diagLines = wo.diagnosis_lines || [];
   for (let i = 0; i < 6; i++) {
-    const lineText = diagLines[i]?.text || '';
+    const lineText = typeof diagLines[i] === 'string' ? diagLines[i] : (diagLines[i]?.text || '');
     const lineY = y + 4.2 + i * 4.2;
     doc.text(`${i + 1} - ${lineText}`, margin + 3, lineY);
   }
-
   y += diagHeight + 3;
 
-  // --- SEÇÃO 3: INSPECÇÃO E CHECKLIST DE ENTRADA ---
+  // --- SEÇÃO 3: CHECKLIST ---
   y = drawSectionHeader('3. INSPECÇÃO E CHECKLIST DE ENTRADA', y);
-
   const checklistHeight = 26;
   doc.setDrawColor(160, 200, 230);
   doc.rect(margin, y, contentWidth, checklistHeight);
@@ -173,7 +156,7 @@ export const generateWorkOrderPDF = (
   const col2X = margin + (contentWidth / 2) + 2;
 
   const getCheckSymbol = (labelSubstring: string) => {
-    const item = wo.entry_checklist?.find((c) => c.label.toLowerCase().includes(labelSubstring.toLowerCase()));
+    const item = wo.entry_checklist?.find((c: any) => c.label?.toLowerCase().includes(labelSubstring.toLowerCase()));
     return item?.checked ? ' [X]' : '  o';
   };
 
@@ -181,30 +164,24 @@ export const generateWorkOrderPDF = (
   doc.setFontSize(7.5);
   doc.setTextColor(0, 0, 0);
 
-  // Coluna 1
-  doc.text(`Nível de Óleo do Motor (OK / Repor)${getCheckSymbol('motor')}`, col1X, y + 4.5);
-  doc.text(`Nível de Óleo Hidráulico (OK / Repor)${getCheckSymbol('hidráulico')}`, col1X, y + 9.0);
-  doc.text(`Líquido de Refrigeração (Radiador)${getCheckSymbol('radiador')}`, col1X, y + 13.5);
-  doc.text(`Filtros de Ar e Combustível (Estado)${getCheckSymbol('filtros')}`, col1X, y + 18.0);
-  doc.text(`Estado das Lagartas / Pneus e Aperto${getCheckSymbol('pneus')}`, col1X, y + 22.5);
+  doc.text(`Nível de Óleo do Motor${getCheckSymbol('motor')}`, col1X, y + 4.5);
+  doc.text(`Nível de Óleo Hidráulico${getCheckSymbol('hidráulico')}`, col1X, y + 9.0);
+  doc.text(`Líquido de Refrigeração${getCheckSymbol('radiador')}`, col1X, y + 13.5);
+  doc.text(`Filtros de Ar e Combustível${getCheckSymbol('filtros')}`, col1X, y + 18.0);
+  doc.text(`Estado das Lagartas / Pneus${getCheckSymbol('pneus')}`, col1X, y + 22.5);
 
-  // Coluna 2
-  doc.text(`Sistema Elétrico, Luzes e Faróis${getCheckSymbol('elétrico')}`, col2X, y + 4.5);
-  doc.text(`Vidros, Espelhos e Cabine do Operador${getCheckSymbol('vidros')}`, col2X, y + 9.0);
-  doc.text(`Dispositivos de Segurança / Extintor${getCheckSymbol('extintor')}`, col2X, y + 13.5);
-  doc.text(`Dispositivos de Segurança / Extintor${getCheckSymbol('segurança')}`, col2X, y + 18.0);
-
-  // Nível de combustível
-  doc.setFont('helvetica', 'bold');
-  doc.text('NÍVEL COMBUSTÍVEL: E  ⊔  1/4  ⊔  1/2  ⊔  3/4  ⊔  F  ⊔', col2X, y + 22.5);
+  doc.text(`Sistema Elétrico e Luzes${getCheckSymbol('elétrico')}`, col2X, y + 4.5);
+  doc.text(`Vidros e Cabine${getCheckSymbol('vidros')}`, col2X, y + 9.0);
+  doc.text(`Dispositivos de Segurança${getCheckSymbol('segurança')}`, col2X, y + 13.5);
+  doc.text(`Extintor${getCheckSymbol('extintor')}`, col2X, y + 18.0);
+  doc.text('NÍVEL COMBUSTÍVEL: E  ⊔  1/4  ⊔  1/2  ⊔  3/4  ⊔  F', col2X, y + 22.5);
 
   y += checklistHeight + 3;
 
-  // --- SEÇÃO 4: PEÇAS NECESSÁRIAS / SUBSTITUÍDAS (PART REQUEST) ---
+  // --- SEÇÃO 4: PEÇAS ---
   y = drawSectionHeader('4. PEÇAS NECESSÁRIAS / SUBSTITUÍDAS (PART REQUEST)', y);
-
   const partsData = (wo.parts_replaced && wo.parts_replaced.length > 0)
-    ? wo.parts_replaced.map((p) => [p.reference || '', p.description || '', p.quantity?.toString() || '1'])
+    ? wo.parts_replaced.map((p: any) => [p.reference || '', p.description || '', p.quantity?.toString() || '1'])
     : requisitionItems.length > 0
     ? requisitionItems.map((item) => [item.part_number || '', item.description || '', item.quantity_requested?.toString() || '1'])
     : [];
@@ -218,34 +195,17 @@ export const generateWorkOrderPDF = (
     margin: { left: margin, right: margin },
     tableWidth: contentWidth,
     theme: 'grid',
-    styles: {
-      fontSize: 8,
-      cellPadding: 2,
-      textColor: [0, 0, 0],
-      lineColor: [160, 200, 230],
-      lineWidth: 0.3,
-      font: 'helvetica',
-    },
-    headStyles: {
-      fillColor: [70, 160, 215], // Tom azul do modelo fornecido
-      textColor: [255, 255, 255],
-      fontStyle: 'bold',
-      halign: 'center',
-    },
-    columnStyles: {
-      0: { cellWidth: 50, halign: 'center' },
-      1: { cellWidth: 'auto', halign: 'left' },
-      2: { cellWidth: 45, halign: 'center' },
-    },
+    styles: { fontSize: 8, cellPadding: 2, textColor: [0, 0, 0], lineColor: [160, 200, 230], lineWidth: 0.3, font: 'helvetica' },
+    headStyles: { fillColor: [70, 160, 215], textColor: [255, 255, 255], fontStyle: 'bold', halign: 'center' },
+    columnStyles: { 0: { cellWidth: 50, halign: 'center' }, 1: { cellWidth: 'auto', halign: 'left' }, 2: { cellWidth: 45, halign: 'center' } },
     head: [['REFERÊNCIA', 'DESCRIÇÃO DA PEÇA', 'QUANTIDADE']],
     body: partsData,
   });
 
   y = (doc as any).lastAutoTable.finalY + 3;
 
-  // --- SEÇÃO 5: OBSERVAÇÕES DE SAÍDA / NOTAS ADICIONAIS ---
+  // --- SEÇÃO 5: OBSERVAÇÕES E ASSINATURAS ---
   y = drawSectionHeader('5. OBSERVAÇÕES DE SAÍDA / NOTAS ADICIONAIS', y);
-
   const obsHeight = 24;
   doc.setDrawColor(160, 200, 230);
   doc.rect(margin, y, contentWidth, obsHeight);
@@ -256,42 +216,34 @@ export const generateWorkOrderPDF = (
 
   const obsText = wo.exit_observations || '';
   const obsLines = obsText ? obsText.split('\n') : [];
-
   for (let i = 0; i < 5; i++) {
-    const lineText = obsLines[i] || '';
-    const lineY = y + 4.2 + i * 4.2;
-    doc.text(`${i + 1} - ${lineText}`, margin + 3, lineY);
+    doc.text(`${i + 1} - ${obsLines[i] || ''}`, margin + 3, y + 4.2 + i * 4.2);
   }
 
   y += obsHeight + 16;
 
-  // --- ASSINATURAS ---
   const sigWidth = 50;
   const gap = (contentWidth - sigWidth * 3) / 2;
-
   const sig1X = margin;
   const sig2X = sig1X + sigWidth + gap;
   const sig3X = sig2X + sigWidth + gap;
 
   doc.setDrawColor(0, 0, 0);
   doc.setLineWidth(0.5);
-
   doc.line(sig1X, y, sig1X + sigWidth, y);
   doc.line(sig2X, y, sig2X + sigWidth, y);
   doc.line(sig3X, y, sig3X + sigWidth, y);
 
   doc.setFont('helvetica', 'bold');
   doc.setFontSize(8);
-  doc.setTextColor(0, 0, 0);
-
-  doc.text('MECÂNICO / TÉCNICO', sig1X + sigWidth / 2, y + 4, { align: 'center' });
-  doc.text('ENGENHEIRO', sig2X + sigWidth / 2, y + 4, { align: 'center' });
-  doc.text('CLIENTE', sig3X + sigWidth / 2, y + 4, { align: 'center' });
+  doc.text(wo.mechanic_sign || 'MECÂNICO / TÉCNICO', sig1X + sigWidth / 2, y + 4, { align: 'center' });
+  doc.text(wo.engineer_sign || 'ENGENHEIRO', sig2X + sigWidth / 2, y + 4, { align: 'center' });
+  doc.text(wo.client_sign || 'CLIENTE', sig3X + sigWidth / 2, y + 4, { align: 'center' });
 
   return doc;
 };
 
-// --- COMPONENTE PRINCIPAL WORKORDERS PAGE ---
+// --- COMPONENTE PRINCIPAL ---
 const STATUSES: { value: WorkOrderStatus; label: string }[] = [
   { value: 'draft', label: 'Draft' },
   { value: 'open', label: 'Open' },
@@ -299,6 +251,17 @@ const STATUSES: { value: WorkOrderStatus; label: string }[] = [
   { value: 'pending_parts', label: 'Pending Parts' },
   { value: 'completed', label: 'Completed' },
   { value: 'cancelled', label: 'Cancelled' },
+];
+
+const CHECKLIST_ITEMS = [
+  'Engine Oil Level',
+  'Hydraulic Oil Level',
+  'Coolant / Radiator Liquid',
+  'Air / Fuel Filters State',
+  'Tracks / Tires & Tightness',
+  'Electrical System & Lights',
+  'Glass / Mirrors / Operator Cab',
+  'Safety Devices & Extinguisher',
 ];
 
 const PAGE_SIZE = 8;
@@ -315,7 +278,8 @@ export function WorkOrdersPage() {
   const [dialogOpen, setDialogOpen] = useState(false);
   const [deleteId, setDeleteId] = useState<string | null>(null);
   const [editing, setEditing] = useState<WorkOrder | null>(null);
-  const [form, setForm] = useState<Partial<WorkOrder>>({});
+  const [activeTab, setActiveTab] = useState<'general' | 'diagnosis' | 'checklist' | 'parts' | 'signoff'>('general');
+  const [form, setForm] = useState<any>({});
   const [detailWO, setDetailWO] = useState<WorkOrder | null>(null);
   const [isSaving, setIsSaving] = useState(false);
 
@@ -338,19 +302,36 @@ export function WorkOrdersPage() {
 
   const openCreate = () => {
     setEditing(null);
+    setActiveTab('general');
     setForm({
       number: generateNumber('OS-2026', workOrders.map((w) => w.number)),
       status: 'open',
       client_project: 'CHINANGOL, LDA',
       entry_date: new Date().toISOString().split('T')[0],
       assigned_technician: profile?.full_name || '',
+      diagnosis_lines: [{ text: '' }],
+      entry_checklist: CHECKLIST_ITEMS.map((label) => ({ label, checked: false })),
+      parts_replaced: [{ reference: '', description: '', quantity: 1 }],
+      exit_observations: '',
+      mechanic_sign: '',
+      engineer_sign: '',
+      client_sign: '',
     });
     setDialogOpen(true);
   };
 
   const openEdit = (wo: WorkOrder) => {
     setEditing(wo);
-    setForm({ ...wo });
+    setActiveTab('general');
+    setForm({
+      ...wo,
+      diagnosis_lines: wo.diagnosis_lines?.length ? wo.diagnosis_lines : [{ text: '' }],
+      entry_checklist: CHECKLIST_ITEMS.map((label) => {
+        const found = (wo.entry_checklist as any[])?.find((c) => c.label === label);
+        return { label, checked: found ? found.checked : false };
+      }),
+      parts_replaced: wo.parts_replaced?.length ? wo.parts_replaced : [{ reference: '', description: '', quantity: 1 }],
+    });
     setDialogOpen(true);
   };
 
@@ -475,7 +456,7 @@ export function WorkOrdersPage() {
                       <TableCell className="font-mono font-medium">{wo.number}</TableCell>
                       <TableCell className="hidden md:table-cell text-sm">{wo.client_project || '—'}</TableCell>
                       <TableCell>{wo.assigned_technician || wo.technician_receptionist || '—'}</TableCell>
-                      <TableCell className="hidden sm:table-cell text-xs">{wo.entry_date || wo.start_date || '—'}</TableCell>
+                      <TableCell className="hidden sm:table-cell text-xs">{wo.entry_date || '—'}</TableCell>
                       <TableCell onClick={(e) => e.stopPropagation()}>
                         <Select value={wo.status} onValueChange={(v) => handleStatusChange(wo, v as WorkOrderStatus)}>
                           <SelectTrigger className="w-[130px] h-7 text-xs">
@@ -522,78 +503,268 @@ export function WorkOrdersPage() {
         <Pagination page={page} totalPages={totalPages} onPageChange={setPage} total={filtered.length} pageSize={PAGE_SIZE} />
       )}
 
-      {/* Modal Criar / Editar */}
+      {/* Modal Multi-Abas Criar / Editar */}
       <Dialog open={dialogOpen} onOpenChange={setDialogOpen}>
         <DialogContent className="max-w-3xl max-h-[90vh] overflow-y-auto">
           <DialogHeader>
-            <DialogTitle>{editing ? 'Editar Ordem de Serviço' : 'Nova Ordem de Serviço'}</DialogTitle>
-            <DialogDescription>Preencha os detalhes do equipamento e do serviço</DialogDescription>
+            <DialogTitle>{editing ? `Editar Ordem de Serviço (${form.number})` : 'Nova Ordem de Serviço'}</DialogTitle>
+            <DialogDescription>Preencha os campos em cada uma das abas abaixo</DialogDescription>
           </DialogHeader>
-          <div className="space-y-4 py-2">
-            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-              <div className="space-y-2">
-                <Label>Número OS *</Label>
-                <Input value={form.number || ''} onChange={(e) => setForm({ ...form, number: e.target.value })} className="font-mono" placeholder="OS-2026-A001" />
-              </div>
-              <div className="space-y-2">
-                <Label>Data de Entrada</Label>
-                <Input type="date" value={form.entry_date || ''} onChange={(e) => setForm({ ...form, entry_date: e.target.value })} />
-              </div>
-              <div className="space-y-2">
-                <Label>Equipamento</Label>
-                <Select value={form.equipment_id || 'none'} onValueChange={(v) => {
-                  const eq = equipment.find((e) => e.id === v);
-                  setForm({
-                    ...form,
-                    equipment_id: v === 'none' ? null : v,
-                    serial_chassis: eq?.serial_number || form.serial_chassis,
-                    hour_km_actual: eq?.horometer ? String(eq.horometer) : form.hour_km_actual,
-                  });
-                }}>
-                  <SelectTrigger><SelectValue placeholder="Selecionar Equipamento..." /></SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="none">Nenhum</SelectItem>
-                    {equipment.map((e) => <SelectItem key={e.id} value={e.id}>{e.code} - {e.name}</SelectItem>)}
-                  </SelectContent>
-                </Select>
-              </div>
-              <div className="space-y-2">
-                <Label>Cliente / Projecto</Label>
-                <Input value={form.client_project || ''} onChange={(e) => setForm({ ...form, client_project: e.target.value })} placeholder="CHINANGOL, LDA" />
-              </div>
-              <div className="space-y-2">
-                <Label>No de Série / Chassi</Label>
-                <Input value={form.serial_chassis || ''} onChange={(e) => setForm({ ...form, serial_chassis: e.target.value })} />
-              </div>
-              <div className="space-y-2">
-                <Label>Horímetro / KM Atual</Label>
-                <Input value={form.hour_km_actual || ''} onChange={(e) => setForm({ ...form, hour_km_actual: e.target.value })} placeholder="Ex: 51,3 H" />
-              </div>
-              <div className="space-y-2">
-                <Label>Técnico / Recepcionista</Label>
-                <Input value={form.technician_receptionist || form.assigned_technician || ''} onChange={(e) => setForm({ ...form, technician_receptionist: e.target.value, assigned_technician: e.target.value })} />
-              </div>
-              <div className="space-y-2">
-                <Label>Estado</Label>
-                <Select value={form.status || 'open'} onValueChange={(v) => setForm({ ...form, status: v as WorkOrderStatus })}>
-                  <SelectTrigger><SelectValue /></SelectTrigger>
-                  <SelectContent>
-                    {STATUSES.map((s) => <SelectItem key={s.value} value={s.value}>{s.label}</SelectItem>)}
-                  </SelectContent>
-                </Select>
-              </div>
-            </div>
 
-            <div className="space-y-2">
-              <Label>Observações de Saída / Notas Adicionais</Label>
-              <Textarea value={form.exit_observations || ''} onChange={(e) => setForm({ ...form, exit_observations: e.target.value })} rows={3} placeholder="Escreva notas de saída ou observações gerais..." />
-            </div>
+          {/* Abas Negação / Navegação */}
+          <div className="flex border-b border-border mb-4 gap-2">
+            {[
+              { id: 'general', label: 'General' },
+              { id: 'diagnosis', label: 'Diagnosis' },
+              { id: 'checklist', label: 'Checklist' },
+              { id: 'parts', label: 'Parts Required' },
+              { id: 'signoff', label: 'Sign-Off' },
+            ].map((tab) => (
+              <button
+                key={tab.id}
+                type="button"
+                onClick={() => setActiveTab(tab.id as any)}
+                className={`px-4 py-2 text-sm font-medium border-b-2 transition-colors ${
+                  activeTab === tab.id
+                    ? 'border-primary text-primary'
+                    : 'border-transparent text-muted-foreground hover:text-foreground'
+                }`}
+              >
+                {tab.label}
+              </button>
+            ))}
           </div>
-          <DialogFooter>
+
+          <div className="space-y-4 py-2 min-h-[300px]">
+            {/* ABA 1: GENERAL */}
+            {activeTab === 'general' && (
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                <div className="space-y-2">
+                  <Label>WO Number *</Label>
+                  <Input value={form.number || ''} onChange={(e) => setForm({ ...form, number: e.target.value })} className="font-mono" />
+                </div>
+                <div className="space-y-2">
+                  <Label>Equipment *</Label>
+                  <Select value={form.equipment_id || 'none'} onValueChange={(v) => {
+                    const eq = equipment.find((e) => e.id === v);
+                    setForm({
+                      ...form,
+                      equipment_id: v === 'none' ? null : v,
+                      serial_chassis: eq?.serial_number || form.serial_chassis,
+                      hour_km_actual: eq?.horometer ? String(eq.horometer) : form.hour_km_actual,
+                    });
+                  }}>
+                    <SelectTrigger><SelectValue placeholder="Selecionar Equipamento..." /></SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="none">Nenhum</SelectItem>
+                      {equipment.map((e) => <SelectItem key={e.id} value={e.id}>{e.code} - {e.name}</SelectItem>)}
+                    </SelectContent>
+                  </Select>
+                </div>
+                <div className="space-y-2">
+                  <Label>Serial / Chassis No.</Label>
+                  <Input value={form.serial_chassis || ''} onChange={(e) => setForm({ ...form, serial_chassis: e.target.value })} />
+                </div>
+                <div className="space-y-2">
+                  <Label>Entry Date</Label>
+                  <Input type="date" value={form.entry_date || ''} onChange={(e) => setForm({ ...form, entry_date: e.target.value })} />
+                </div>
+                <div className="space-y-2">
+                  <Label>Current Horometer / Odometer (KM/H)</Label>
+                  <Input value={form.hour_km_actual || ''} onChange={(e) => setForm({ ...form, hour_km_actual: e.target.value })} placeholder="e.g. 51.3 H" />
+                </div>
+                <div className="space-y-2">
+                  <Label>Client / Project</Label>
+                  <Input value={form.client_project || ''} onChange={(e) => setForm({ ...form, client_project: e.target.value })} />
+                </div>
+                <div className="space-y-2">
+                  <Label>Receptionist / Lead Tech</Label>
+                  <Input value={form.technician_receptionist || ''} onChange={(e) => setForm({ ...form, technician_receptionist: e.target.value })} />
+                </div>
+                <div className="space-y-2">
+                  <Label>Assigned Mechanic</Label>
+                  <Input value={form.assigned_technician || ''} onChange={(e) => setForm({ ...form, assigned_technician: e.target.value })} />
+                </div>
+                <div className="space-y-2">
+                  <Label>Status</Label>
+                  <Select value={form.status || 'open'} onValueChange={(v) => setForm({ ...form, status: v as WorkOrderStatus })}>
+                    <SelectTrigger><SelectValue /></SelectTrigger>
+                    <SelectContent>
+                      {STATUSES.map((s) => <SelectItem key={s.value} value={s.value}>{s.label}</SelectItem>)}
+                    </SelectContent>
+                  </Select>
+                </div>
+              </div>
+            )}
+
+            {/* ABA 2: DIAGNOSIS */}
+            {activeTab === 'diagnosis' && (
+              <div className="space-y-4">
+                <h3 className="text-sm font-semibold text-muted-foreground">2. Technical Diagnosis & Requested Tasks</h3>
+                {form.diagnosis_lines?.map((line: any, idx: number) => (
+                  <div key={idx} className="flex items-center gap-2">
+                    <span className="text-sm font-medium w-6">{idx + 1}.</span>
+                    <Input
+                      value={line.text || ''}
+                      onChange={(e) => {
+                        const newLines = [...form.diagnosis_lines];
+                        newLines[idx] = { text: e.target.value };
+                        setForm({ ...form, diagnosis_lines: newLines });
+                      }}
+                      placeholder={`Task / Diagnosis line ${idx + 1}`}
+                    />
+                    <Button
+                      variant="ghost"
+                      size="icon"
+                      className="text-destructive"
+                      onClick={() => {
+                        const newLines = form.diagnosis_lines.filter((_: any, i: number) => i !== idx);
+                        setForm({ ...form, diagnosis_lines: newLines });
+                      }}
+                    >
+                      <Trash2 className="w-4 h-4" />
+                    </Button>
+                  </div>
+                ))}
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={() => setForm({ ...form, diagnosis_lines: [...(form.diagnosis_lines || []), { text: '' }] })}
+                >
+                  <Plus className="w-4 h-4 mr-1" /> Add Line
+                </Button>
+              </div>
+            )}
+
+            {/* ABA 3: CHECKLIST */}
+            {activeTab === 'checklist' && (
+              <div className="space-y-4">
+                <h3 className="text-sm font-semibold text-muted-foreground">3. Entry Inspection & Checklist</h3>
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                  {form.entry_checklist?.map((item: any, idx: number) => (
+                    <label key={idx} className="flex items-center justify-between p-3 border rounded-lg cursor-pointer hover:bg-muted/40">
+                      <span className="text-sm">{item.label}</span>
+                      <input
+                        type="checkbox"
+                        checked={item.checked}
+                        onChange={(e) => {
+                          const newChecklist = [...form.entry_checklist];
+                          newChecklist[idx].checked = e.target.checked;
+                          setForm({ ...form, entry_checklist: newChecklist });
+                        }}
+                        className="w-4 h-4 accent-primary"
+                      />
+                    </label>
+                  ))}
+                </div>
+              </div>
+            )}
+
+            {/* ABA 4: PARTS REQUIRED */}
+            {activeTab === 'parts' && (
+              <div className="space-y-4">
+                <h3 className="text-sm font-semibold text-muted-foreground">4. Required / Replaced Parts (Part Request)</h3>
+                {form.parts_replaced?.map((part: any, idx: number) => (
+                  <div key={idx} className="flex items-center gap-2">
+                    <Input
+                      placeholder="Part Reference / P/N"
+                      value={part.reference || ''}
+                      onChange={(e) => {
+                        const parts = [...form.parts_replaced];
+                        parts[idx].reference = e.target.value;
+                        setForm({ ...form, parts_replaced: parts });
+                      }}
+                    />
+                    <Input
+                      placeholder="Part Description"
+                      value={part.description || ''}
+                      onChange={(e) => {
+                        const parts = [...form.parts_replaced];
+                        parts[idx].description = e.target.value;
+                        setForm({ ...form, parts_replaced: parts });
+                      }}
+                    />
+                    <Input
+                      type="number"
+                      className="w-20"
+                      value={part.quantity || 1}
+                      onChange={(e) => {
+                        const parts = [...form.parts_replaced];
+                        parts[idx].quantity = parseInt(e.target.value) || 1;
+                        setForm({ ...form, parts_replaced: parts });
+                      }}
+                    />
+                    <Button
+                      variant="ghost"
+                      size="icon"
+                      className="text-destructive"
+                      onClick={() => {
+                        const parts = form.parts_replaced.filter((_: any, i: number) => i !== idx);
+                        setForm({ ...form, parts_replaced: parts });
+                      }}
+                    >
+                      <Trash2 className="w-4 h-4" />
+                    </Button>
+                  </div>
+                ))}
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={() => setForm({ ...form, parts_replaced: [...(form.parts_replaced || []), { reference: '', description: '', quantity: 1 }] })}
+                >
+                  <Plus className="w-4 h-4 mr-1" /> Add Part
+                </Button>
+              </div>
+            )}
+
+            {/* ABA 5: SIGN-OFF */}
+            {activeTab === 'signoff' && (
+              <div className="space-y-4">
+                <h3 className="text-sm font-semibold text-muted-foreground">5. Exit Observations & Sign-Off</h3>
+                <div className="space-y-2">
+                  <Label>Exit Observations / Additional Notes</Label>
+                  <Textarea
+                    value={form.exit_observations || ''}
+                    onChange={(e) => setForm({ ...form, exit_observations: e.target.value })}
+                    rows={4}
+                    placeholder="Enter final remarks, testing status, or exit notes..."
+                  />
+                </div>
+                <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 pt-2">
+                  <div className="space-y-1">
+                    <Label className="text-xs">Mechanic / Tech Sign-off</Label>
+                    <Input
+                      value={form.mechanic_sign || ''}
+                      onChange={(e) => setForm({ ...form, mechanic_sign: e.target.value })}
+                      placeholder="Technician Name"
+                    />
+                  </div>
+                  <div className="space-y-1">
+                    <Label className="text-xs">Engineer / Supervisor Sign-off</Label>
+                    <Input
+                      value={form.engineer_sign || ''}
+                      onChange={(e) => setForm({ ...form, engineer_sign: e.target.value })}
+                      placeholder="Engineer Name"
+                    />
+                  </div>
+                  <div className="space-y-1">
+                    <Label className="text-xs">Client Sign-off</Label>
+                    <Input
+                      value={form.client_sign || ''}
+                      onChange={(e) => setForm({ ...form, client_sign: e.target.value })}
+                      placeholder="Client Representative Name"
+                    />
+                  </div>
+                </div>
+              </div>
+            )}
+          </div>
+
+          <DialogFooter className="mt-4 border-t pt-3">
             <Button variant="outline" onClick={() => setDialogOpen(false)}>Cancelar</Button>
             <Button onClick={handleSave} disabled={isSaving}>
               {isSaving && <Loader2 className="w-4 h-4 mr-2 animate-spin" />}
-              {editing ? 'Guardar Alterações' : 'Criar Ordem de Serviço'}
+              {editing ? 'Save Changes' : 'Create Work Order'}
             </Button>
           </DialogFooter>
         </DialogContent>
