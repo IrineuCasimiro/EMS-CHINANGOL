@@ -4,31 +4,37 @@ import { StatCard, PageHeader, StatusBadge } from '@/components/shared';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { EQUIPMENT_STATUS_LABELS, WORK_ORDER_STATUS_LABELS, ROLE_LABELS, formatDate } from '@/lib/constants';
 import { Truck, Wrench, ClipboardCheck, Route, Package, AlertTriangle, CheckCircle, Clock, TrendingUp } from 'lucide-react';
-import type { LucideIcon } from 'lucide-react';
 
 interface DashboardProps {
   onNavigate: (view: string) => void;
 }
 
 export function Dashboard({ onNavigate }: DashboardProps) {
-  const { equipment, workOrders, inspections, travelLogs, requisitions } = useData();
+  const { 
+    equipment = [], 
+    workOrders = [], 
+    inspections = [], 
+    travelLogs = [], 
+    requisitions = [] 
+  } = useData() || {};
+  
   const { profile } = useAuth();
 
-  const operationalCount = equipment.filter((e) => e.status === 'operational').length;
-  const maintenanceCount = equipment.filter((e) => e.status === 'maintenance').length;
-  const brokenCount = equipment.filter((e) => e.status === 'broken').length;
-  const openWOCount = workOrders.filter((w) => w.status === 'open' || w.status === 'in_progress').length;
-  const pendingInsp = inspections.filter((i) => i.status === 'pending').length;
-  const pendingReq = requisitions.filter((r) => r.status === 'pending').length;
-  const activeTrips = travelLogs.filter((t) => t.status === 'in_transit' || t.status === 'planned').length;
+  const operationalCount = (equipment ?? []).filter((e) => e?.status === 'operational').length;
+  const maintenanceCount = (equipment ?? []).filter((e) => e?.status === 'maintenance').length;
+  const brokenCount = (equipment ?? []).filter((e) => e?.status === 'broken').length;
+  const openWOCount = (workOrders ?? []).filter((w) => w?.status === 'open' || w?.status === 'in_progress').length;
+  const pendingInsp = (inspections ?? []).filter((i) => i?.status === 'pending').length;
+  const pendingReq = (requisitions ?? []).filter((r) => r?.status === 'pending').length;
+  const activeTrips = (travelLogs ?? []).filter((t) => t?.status === 'in_transit' || t?.status === 'planned').length;
 
-  const recentWorkOrders = [...workOrders].slice(0, 5);
-  const criticalItems = equipment.filter((e) => e.status === 'broken' || e.status === 'maintenance').slice(0, 4);
+  const recentWorkOrders = [...(workOrders ?? [])].slice(0, 5);
+  const criticalItems = (equipment ?? []).filter((e) => e?.status === 'broken' || e?.status === 'maintenance').slice(0, 4);
 
   const statusData = [
     { label: 'Operational', value: operationalCount, color: 'bg-emerald-500', key: 'operational' },
     { label: 'Maintenance', value: maintenanceCount, color: 'bg-amber-500', key: 'maintenance' },
-    { label: 'Standby', value: equipment.filter((e) => e.status === 'standby').length, color: 'bg-blue-500', key: 'standby' },
+    { label: 'Standby', value: (equipment ?? []).filter((e) => e?.status === 'standby').length, color: 'bg-blue-500', key: 'standby' },
     { label: 'Broken', value: brokenCount, color: 'bg-red-500', key: 'broken' },
   ];
   const maxStatus = Math.max(...statusData.map((s) => s.value), 1);
@@ -42,10 +48,10 @@ export function Dashboard({ onNavigate }: DashboardProps) {
 
       {/* Stats grid */}
       <div className="grid grid-cols-2 lg:grid-cols-4 gap-4 mb-6">
-        <StatCard label="Total Equipment" value={equipment.length} icon={<Truck className="w-5 h-5" />} color="blue" trend={`${operationalCount} operational`} />
-        <StatCard label="Active Work Orders" value={openWOCount} icon={<Wrench className="w-5 h-5" />} color="amber" trend={`${workOrders.filter(w => w.status === 'waiting_parts').length} awaiting parts`} />
-        <StatCard label="Pending Inspections" value={pendingInsp} icon={<ClipboardCheck className="w-5 h-5" />} color="teal" trend={`${inspections.length} total inspections`} />
-        <StatCard label="Pending Requisitions" value={pendingReq} icon={<Package className="w-5 h-5" />} color="red" trend={`${requisitions.length} total requisitions`} />
+        <StatCard label="Total Equipment" value={(equipment ?? []).length} icon={<Truck className="w-5 h-5" />} color="blue" trend={`${operationalCount} operational`} />
+        <StatCard label="Active Work Orders" value={openWOCount} icon={<Wrench className="w-5 h-5" />} color="amber" trend={`${(workOrders ?? []).filter(w => w?.status === 'waiting_parts').length} awaiting parts`} />
+        <StatCard label="Pending Inspections" value={pendingInsp} icon={<ClipboardCheck className="w-5 h-5" />} color="teal" trend={`${(inspections ?? []).length} total inspections`} />
+        <StatCard label="Pending Requisitions" value={pendingReq} icon={<Package className="w-5 h-5" />} color="red" trend={`${(requisitions ?? []).length} total requisitions`} />
       </div>
 
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-4 mb-6">
@@ -92,18 +98,18 @@ export function Dashboard({ onNavigate }: DashboardProps) {
                 <p className="text-sm text-muted-foreground text-center py-6">No work orders yet</p>
               ) : (
                 recentWorkOrders.map((wo) => {
-                  const eq = equipment.find((e) => e.id === wo.equipment_id);
+                  const eq = (equipment ?? []).find((e) => e?.id === wo?.equipment_id);
                   return (
                     <div
-                      key={wo.id}
+                      key={wo?.id}
                       className="flex items-center justify-between p-3 rounded-md border border-border hover:bg-muted/50 transition-colors cursor-pointer"
                       onClick={() => onNavigate('work-orders')}
                     >
                       <div className="min-w-0 flex-1">
-                        <p className="text-sm font-medium truncate">{wo.number} — {eq?.name || 'Unknown'}</p>
-                        <p className="text-xs text-muted-foreground truncate">{wo.description}</p>
+                        <p className="text-sm font-medium truncate">{wo?.number} — {eq?.name || 'Unknown'}</p>
+                        <p className="text-xs text-muted-foreground truncate">{wo?.description}</p>
                       </div>
-                      <StatusBadge status={wo.status} label={WORK_ORDER_STATUS_LABELS[wo.status]} />
+                      <StatusBadge status={wo?.status} label={WORK_ORDER_STATUS_LABELS[wo?.status] || wo?.status} />
                     </div>
                   );
                 })
@@ -131,12 +137,12 @@ export function Dashboard({ onNavigate }: DashboardProps) {
                 </div>
               ) : (
                 criticalItems.map((eq) => (
-                  <div key={eq.id} className="flex items-center justify-between p-3 rounded-md border border-border">
+                  <div key={eq?.id} className="flex items-center justify-between p-3 rounded-md border border-border">
                     <div className="min-w-0">
-                      <p className="text-sm font-medium truncate">{eq.name}</p>
-                      <p className="text-xs text-muted-foreground truncate">{eq.location} · {eq.serial_number}</p>
+                      <p className="text-sm font-medium truncate">{eq?.name}</p>
+                      <p className="text-xs text-muted-foreground truncate">{eq?.location} · {eq?.serial_number}</p>
                     </div>
-                    <StatusBadge status={eq.status} label={EQUIPMENT_STATUS_LABELS[eq.status]} />
+                    <StatusBadge status={eq?.status} label={EQUIPMENT_STATUS_LABELS[eq?.status] || eq?.status} />
                   </div>
                 ))
               )}
@@ -166,20 +172,20 @@ export function Dashboard({ onNavigate }: DashboardProps) {
                   <Clock className="w-4 h-4 text-amber-500" />
                   <span className="text-xs text-muted-foreground">Waiting Parts</span>
                 </div>
-                <p className="text-xl font-bold">{workOrders.filter(w => w.status === 'waiting_parts').length}</p>
+                <p className="text-xl font-bold">{(workOrders ?? []).filter(w => w?.status === 'waiting_parts').length}</p>
               </div>
             </div>
             <div className="space-y-2">
-              {travelLogs.filter((t) => t.status === 'in_transit' || t.status === 'planned').slice(0, 3).map((tl) => (
-                <div key={tl.id} className="flex items-center justify-between p-2 rounded-md border border-border">
+              {(travelLogs ?? []).filter((t) => t?.status === 'in_transit' || t?.status === 'planned').slice(0, 3).map((tl) => (
+                <div key={tl?.id} className="flex items-center justify-between p-2 rounded-md border border-border">
                   <div className="min-w-0">
-                    <p className="text-sm font-medium truncate">{tl.number}</p>
-                    <p className="text-xs text-muted-foreground truncate">{tl.destination}</p>
+                    <p className="text-sm font-medium truncate">{tl?.number}</p>
+                    <p className="text-xs text-muted-foreground truncate">{tl?.destination}</p>
                   </div>
-                  <StatusBadge status={tl.status} label={tl.status === 'in_transit' ? 'In Transit' : 'Planned'} />
+                  <StatusBadge status={tl?.status} label={tl?.status === 'in_transit' ? 'In Transit' : 'Planned'} />
                 </div>
               ))}
-              {travelLogs.filter((t) => t.status === 'in_transit' || t.status === 'planned').length === 0 && (
+              {(travelLogs ?? []).filter((t) => t?.status === 'in_transit' || t?.status === 'planned').length === 0 && (
                 <p className="text-sm text-muted-foreground text-center py-3">No active trips</p>
               )}
             </div>
