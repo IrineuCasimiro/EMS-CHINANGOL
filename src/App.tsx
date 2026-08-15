@@ -6,11 +6,9 @@ import { AuthScreen } from '@/components/auth/AuthScreen';
 import { AppShell } from '@/components/layout/AppShell';
 import { Dashboard } from '@/pages/Dashboard';
 import { EquipmentPage } from '@/pages/EquipmentPage';
-import { InspectionsPage } from '@/pages/InspectionsPage';
 import { WorkOrdersPage } from '@/pages/WorkOrdersPage';
 import { TravelLogsPage } from '@/pages/TravelLogsPage';
 import { RequisitionsPage } from '@/pages/RequisitionsPage';
-import { DocumentsPage } from '@/pages/DocumentsPage';
 import { AdminPage } from '@/pages/AdminPage';
 import { Toaster } from '@/components/ui/sonner';
 
