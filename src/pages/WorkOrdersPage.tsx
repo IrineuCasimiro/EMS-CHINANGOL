@@ -70,7 +70,7 @@ export const generateWorkOrderPDF = (
   doc.setFont('helvetica', 'bold');
   doc.setFontSize(10);
   doc.setTextColor(218, 41, 28);
-  doc.text(`Nº ${wo.number || 'OS-2026-A001'}`, boxX + boxWidth / 2, boxY + 5.2, { align: 'center' });
+  doc.text(`Nº ${wo?.number || 'OS-2026-A001'}`, boxX + boxWidth / 2, boxY + 5.2, { align: 'center' });
 
   y += 18;
 
@@ -91,11 +91,11 @@ export const generateWorkOrderPDF = (
 
   const eqCode = equipment ? `${equipment.code || ''} ${equipment.name || ''}`.trim() : '';
   const eqModel = equipment ? equipment.model || '' : '';
-  const serialNo = wo.serial_chassis || equipment?.serial_number || '';
-  const entryDate = wo.entry_date || '';
-  const horometer = wo.hour_km_actual || '';
-  const clientProject = wo.client_project || '';
-  const receptionist = wo.technician_receptionist || '';
+  const serialNo = wo?.serial_chassis || equipment?.serial_number || '';
+  const entryDate = wo?.entry_date || '';
+  const horometer = wo?.hour_km_actual || '';
+  const clientProject = wo?.client_project || '';
+  const receptionist = wo?.technician_receptionist || '';
 
   autoTable(doc, {
     startY: y,
@@ -138,7 +138,7 @@ export const generateWorkOrderPDF = (
   doc.setFontSize(8);
   doc.setTextColor(0, 0, 0);
 
-  const diagLines = wo.diagnosis_lines || [];
+  const diagLines = wo?.diagnosis_lines || [];
   for (let i = 0; i < 6; i++) {
     const lineText = typeof diagLines[i] === 'string' ? diagLines[i] : (diagLines[i]?.text || '');
     const lineY = y + 4.2 + i * 4.2;
@@ -156,7 +156,7 @@ export const generateWorkOrderPDF = (
   const col2X = margin + (contentWidth / 2) + 2;
 
   const getCheckSymbol = (labelSubstring: string) => {
-    const item = wo.entry_checklist?.find((c: any) => c.label?.toLowerCase().includes(labelSubstring.toLowerCase()));
+    const item = (wo?.entry_checklist ?? []).find((c: any) => c.label?.toLowerCase().includes(labelSubstring.toLowerCase()));
     return item?.checked ? ' [X]' : '  o';
   };
 
@@ -180,10 +180,10 @@ export const generateWorkOrderPDF = (
 
   // --- SEÇÃO 4: PEÇAS ---
   y = drawSectionHeader('4. PEÇAS NECESSÁRIAS / SUBSTITUÍDAS (PART REQUEST)', y);
-  const partsData = (wo.parts_replaced && wo.parts_replaced.length > 0)
+  const partsData = (wo?.parts_replaced && wo.parts_replaced.length > 0)
     ? wo.parts_replaced.map((p: any) => [p.reference || '', p.description || '', p.quantity?.toString() || '1'])
-    : requisitionItems.length > 0
-    ? requisitionItems.map((item) => [item.part_number || '', item.description || '', item.quantity_requested?.toString() || '1'])
+    : (requisitionItems ?? []).length > 0
+    ? (requisitionItems ?? []).map((item) => [item.part_number || '', item.description || '', item.quantity_requested?.toString() || '1'])
     : [];
 
   while (partsData.length < 6) {
@@ -214,7 +214,7 @@ export const generateWorkOrderPDF = (
   doc.setFontSize(8);
   doc.setTextColor(0, 0, 0);
 
-  const obsText = wo.exit_observations || '';
+  const obsText = wo?.exit_observations || '';
   const obsLines = obsText ? obsText.split('\n') : [];
   for (let i = 0; i < 5; i++) {
     doc.text(`${i + 1} - ${obsLines[i] || ''}`, margin + 3, y + 4.2 + i * 4.2);
@@ -236,9 +236,9 @@ export const generateWorkOrderPDF = (
 
   doc.setFont('helvetica', 'bold');
   doc.setFontSize(8);
-  doc.text(wo.mechanic_sign || 'MECÂNICO / TÉCNICO', sig1X + sigWidth / 2, y + 4, { align: 'center' });
-  doc.text(wo.engineer_sign || 'ENGENHEIRO', sig2X + sigWidth / 2, y + 4, { align: 'center' });
-  doc.text(wo.client_sign || 'CLIENTE', sig3X + sigWidth / 2, y + 4, { align: 'center' });
+  doc.text(wo?.mechanic_sign || 'MECÂNICO / TÉCNICO', sig1X + sigWidth / 2, y + 4, { align: 'center' });
+  doc.text(wo?.engineer_sign || 'ENGENHEIRO', sig2X + sigWidth / 2, y + 4, { align: 'center' });
+  doc.text(wo?.client_sign || 'CLIENTE', sig3X + sigWidth / 2, y + 4, { align: 'center' });
 
   return doc;
 };
@@ -267,7 +267,7 @@ const CHECKLIST_ITEMS = [
 const PAGE_SIZE = 8;
 
 export function WorkOrdersPage() {
-  const { workOrders, equipment, requisitionItems, saveWorkOrder, deleteWorkOrder } = useData();
+  const { workOrders = [], equipment = [], requisitionItems = [], saveWorkOrder, deleteWorkOrder } = useData();
   const { profile } = useAuth();
   const { toast } = useToast();
   const { generateAndSave } = usePdfGenerator();
@@ -286,10 +286,11 @@ export function WorkOrdersPage() {
   const canEdit = profile?.role === 'admin' || profile?.role === 'user';
   const canDelete = profile?.role === 'admin';
 
+  // Blindagem com (workOrders ?? []) para evitar erro se a lista vier undefined/null
   const filtered = useMemo(() => {
-    return workOrders.filter((w) => {
+    return (workOrders ?? []).filter((w) => {
       const matchSearch = !search ||
-        w.number.toLowerCase().includes(search.toLowerCase()) ||
+        w.number?.toLowerCase().includes(search.toLowerCase()) ||
         (w.client_project && w.client_project.toLowerCase().includes(search.toLowerCase())) ||
         (w.assigned_technician && w.assigned_technician.toLowerCase().includes(search.toLowerCase()));
       const matchStatus = statusFilter === 'all' || w.status === statusFilter;
@@ -304,7 +305,7 @@ export function WorkOrdersPage() {
     setEditing(null);
     setActiveTab('general');
     setForm({
-      number: generateNumber('OS-2026', workOrders.map((w) => w.number)),
+      number: generateNumber('OS-2026', (workOrders ?? []).map((w) => w.number)),
       status: 'open',
       client_project: 'CHINANGOL, LDA',
       entry_date: new Date().toISOString().split('T')[0],
@@ -388,22 +389,22 @@ export function WorkOrdersPage() {
   };
 
   const handlePreview = (wo: WorkOrder) => {
-    const eq = equipment.find((e) => e.id === wo.equipment_id);
-    const reqItems = requisitionItems.filter((i) => i.requisition_id === wo.id);
+    const eq = (equipment ?? []).find((e) => e.id === wo.equipment_id);
+    const reqItems = (requisitionItems ?? []).filter((i) => i.requisition_id === wo.id);
     const doc = generateWorkOrderPDF(wo, eq, [], reqItems);
     previewPDF(doc);
   };
 
   const handleDownload = (wo: WorkOrder) => {
-    const eq = equipment.find((e) => e.id === wo.equipment_id);
-    const reqItems = requisitionItems.filter((i) => i.requisition_id === wo.id);
+    const eq = (equipment ?? []).find((e) => e.id === wo.equipment_id);
+    const reqItems = (requisitionItems ?? []).filter((i) => i.requisition_id === wo.id);
     const doc = generateWorkOrderPDF(wo, eq, [], reqItems);
     downloadPDF(doc, `${wo.number}.pdf`);
   };
 
   const handleSaveAndUpload = async (wo: WorkOrder) => {
-    const eq = equipment.find((e) => e.id === wo.equipment_id);
-    const reqItems = requisitionItems.filter((i) => i.requisition_id === wo.id);
+    const eq = (equipment ?? []).find((e) => e.id === wo.equipment_id);
+    const reqItems = (requisitionItems ?? []).filter((i) => i.requisition_id === wo.id);
     const doc = generateWorkOrderPDF(wo, eq, [], reqItems);
     const { error } = await generateAndSave(doc, 'work_order', wo.id, wo.number, `Work Order ${wo.number}`);
     if (error) {
@@ -546,7 +547,7 @@ export function WorkOrdersPage() {
                 <div className="space-y-2">
                   <Label>Equipment *</Label>
                   <Select value={form.equipment_id || 'none'} onValueChange={(v) => {
-                    const eq = equipment.find((e) => e.id === v);
+                    const eq = (equipment ?? []).find((e) => e.id === v);
                     setForm({
                       ...form,
                       equipment_id: v === 'none' ? null : v,
@@ -557,7 +558,7 @@ export function WorkOrdersPage() {
                     <SelectTrigger><SelectValue placeholder="Selecionar Equipamento..." /></SelectTrigger>
                     <SelectContent>
                       <SelectItem value="none">Nenhum</SelectItem>
-                      {equipment.map((e) => <SelectItem key={e.id} value={e.id}>{e.code} - {e.name}</SelectItem>)}
+                      {(equipment ?? []).map((e) => <SelectItem key={e.id} value={e.id}>{e.code} - {e.name}</SelectItem>)}
                     </SelectContent>
                   </Select>
                 </div>
@@ -601,13 +602,13 @@ export function WorkOrdersPage() {
             {activeTab === 'diagnosis' && (
               <div className="space-y-4">
                 <h3 className="text-sm font-semibold text-muted-foreground">2. Technical Diagnosis & Requested Tasks</h3>
-                {form.diagnosis_lines?.map((line: any, idx: number) => (
+                {(form.diagnosis_lines ?? []).map((line: any, idx: number) => (
                   <div key={idx} className="flex items-center gap-2">
                     <span className="text-sm font-medium w-6">{idx + 1}.</span>
                     <Input
                       value={line.text || ''}
                       onChange={(e) => {
-                        const newLines = [...form.diagnosis_lines];
+                        const newLines = [...(form.diagnosis_lines ?? [])];
                         newLines[idx] = { text: e.target.value };
                         setForm({ ...form, diagnosis_lines: newLines });
                       }}
@@ -618,7 +619,7 @@ export function WorkOrdersPage() {
                       size="icon"
                       className="text-destructive"
                       onClick={() => {
-                        const newLines = form.diagnosis_lines.filter((_: any, i: number) => i !== idx);
+                        const newLines = (form.diagnosis_lines ?? []).filter((_: any, i: number) => i !== idx);
                         setForm({ ...form, diagnosis_lines: newLines });
                       }}
                     >
@@ -641,14 +642,14 @@ export function WorkOrdersPage() {
               <div className="space-y-4">
                 <h3 className="text-sm font-semibold text-muted-foreground">3. Entry Inspection & Checklist</h3>
                 <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-                  {form.entry_checklist?.map((item: any, idx: number) => (
+                  {(form.entry_checklist ?? []).map((item: any, idx: number) => (
                     <label key={idx} className="flex items-center justify-between p-3 border rounded-lg cursor-pointer hover:bg-muted/40">
                       <span className="text-sm">{item.label}</span>
                       <input
                         type="checkbox"
                         checked={item.checked}
                         onChange={(e) => {
-                          const newChecklist = [...form.entry_checklist];
+                          const newChecklist = [...(form.entry_checklist ?? [])];
                           newChecklist[idx].checked = e.target.checked;
                           setForm({ ...form, entry_checklist: newChecklist });
                         }}
@@ -664,13 +665,13 @@ export function WorkOrdersPage() {
             {activeTab === 'parts' && (
               <div className="space-y-4">
                 <h3 className="text-sm font-semibold text-muted-foreground">4. Required / Replaced Parts (Part Request)</h3>
-                {form.parts_replaced?.map((part: any, idx: number) => (
+                {(form.parts_replaced ?? []).map((part: any, idx: number) => (
                   <div key={idx} className="flex items-center gap-2">
                     <Input
                       placeholder="Part Reference / P/N"
                       value={part.reference || ''}
                       onChange={(e) => {
-                        const parts = [...form.parts_replaced];
+                        const parts = [...(form.parts_replaced ?? [])];
                         parts[idx].reference = e.target.value;
                         setForm({ ...form, parts_replaced: parts });
                       }}
@@ -679,7 +680,7 @@ export function WorkOrdersPage() {
                       placeholder="Part Description"
                       value={part.description || ''}
                       onChange={(e) => {
-                        const parts = [...form.parts_replaced];
+                        const parts = [...(form.parts_replaced ?? [])];
                         parts[idx].description = e.target.value;
                         setForm({ ...form, parts_replaced: parts });
                       }}
@@ -689,7 +690,7 @@ export function WorkOrdersPage() {
                       className="w-20"
                       value={part.quantity || 1}
                       onChange={(e) => {
-                        const parts = [...form.parts_replaced];
+                        const parts = [...(form.parts_replaced ?? [])];
                         parts[idx].quantity = parseInt(e.target.value) || 1;
                         setForm({ ...form, parts_replaced: parts });
                       }}
@@ -699,7 +700,7 @@ export function WorkOrdersPage() {
                       size="icon"
                       className="text-destructive"
                       onClick={() => {
-                        const parts = form.parts_replaced.filter((_: any, i: number) => i !== idx);
+                        const parts = (form.parts_replaced ?? []).filter((_: any, i: number) => i !== idx);
                         setForm({ ...form, parts_replaced: parts });
                       }}
                     >

@@ -280,7 +280,7 @@ const UNIT_OPTIONS = ['UN', 'L', 'KG', 'M', 'PAIR', 'SET', 'KIT', 'BOX'];
 const PAGE_SIZE = 8;
 
 export function RequisitionsPage() {
-  const { requisitions, requisitionItems, equipment, workOrders, saveRequisition, deleteRequisition, saveRequisitionItem, deleteRequisitionItem } = useData();
+  const { requisitions = [], requisitionItems = [], equipment = [], workOrders = [], saveRequisition, deleteRequisition, saveRequisitionItem, deleteRequisitionItem } = useData();
   const { profile } = useAuth();
   const { toast } = useToast();
   const { generateAndSave } = usePdfGenerator();
@@ -303,10 +303,10 @@ export function RequisitionsPage() {
   const canDelete = profile?.role === 'admin';
 
   const filtered = useMemo(() => {
-    return requisitions.filter((r) => {
+    return (requisitions || []).filter((r) => {
       const matchSearch = !search ||
-        r.number.toLowerCase().includes(search.toLowerCase()) ||
-        r.requested_by.toLowerCase().includes(search.toLowerCase()) ||
+        r.number?.toLowerCase().includes(search.toLowerCase()) ||
+        r.requested_by?.toLowerCase().includes(search.toLowerCase()) ||
         (r.client && r.client.toLowerCase().includes(search.toLowerCase()));
       const matchStatus = statusFilter === 'all' || r.status === statusFilter;
       return matchSearch && matchStatus;
@@ -319,7 +319,7 @@ export function RequisitionsPage() {
   const openCreate = () => {
     setEditing(null);
     setForm({
-      number: generateNumber('TT', requisitions.map((r) => r.number)),
+      number: generateNumber('TT', (requisitions || []).map((r) => r.number)),
       status: 'pending',
       requested_by: profile?.full_name || '',
       urgency: false,
@@ -336,7 +336,7 @@ export function RequisitionsPage() {
   const openEdit = (req: PartsRequisition) => {
     setEditing(req);
     setForm({ ...req });
-    const existing = requisitionItems.filter((i) => i.requisition_id === req.id);
+    const existing = (requisitionItems || []).filter((i) => i.requisition_id === req.id);
     setPendingItems(existing);
     setNewItem({ quantity: 1, unit: 'UN' });
     setDialogOpen(true);
@@ -446,19 +446,19 @@ export function RequisitionsPage() {
   };
 
   const handlePreview = (req: PartsRequisition) => {
-    const items = requisitionItems.filter((i) => i.requisition_id === req.id);
+    const items = (requisitionItems || []).filter((i) => i.requisition_id === req.id);
     const doc = generateRequisitionPDF(req, items);
     previewPDF(doc);
   };
 
   const handleDownload = (req: PartsRequisition) => {
-    const items = requisitionItems.filter((i) => i.requisition_id === req.id);
+    const items = (requisitionItems || []).filter((i) => i.requisition_id === req.id);
     const doc = generateRequisitionPDF(req, items);
     downloadPDF(doc, `${req.number}.pdf`);
   };
 
   const handleSaveAndUpload = async (req: PartsRequisition) => {
-    const items = requisitionItems.filter((i) => i.requisition_id === req.id);
+    const items = (requisitionItems || []).filter((i) => i.requisition_id === req.id);
     const doc = generateRequisitionPDF(req, items);
     const { error } = await generateAndSave(doc, 'requisition', req.id, req.number, `Requisition ${req.number}`);
     if (error) {
@@ -507,7 +507,7 @@ export function RequisitionsPage() {
               </TableHeader>
               <TableBody>
                 {paginated.map((req) => {
-                  const items = requisitionItems.filter((i) => i.requisition_id === req.id);
+                  const items = (requisitionItems || []).filter((i) => i.requisition_id === req.id);
                   return (
                     <TableRow key={req.id} className="hover:bg-muted/50 cursor-pointer" onClick={() => setDetailReq(req)}>
                       <TableCell className="font-mono font-medium">{req.number}</TableCell>
@@ -599,20 +599,20 @@ export function RequisitionsPage() {
               <div className="space-y-2">
                 <Label>Serv. No. / Work Order</Label>
                 <Select value={form.work_order_id || 'none'} onValueChange={(v) => {
-                  const wo = workOrders.find(w => w.id === v);
+                  const wo = (workOrders || []).find(w => w.id === v);
                   setForm({ ...form, work_order_id: v === 'none' ? null : v, service_number: wo?.number || form.service_number });
                 }}>
                   <SelectTrigger><SelectValue placeholder="Select Work Order..." /></SelectTrigger>
                   <SelectContent>
                     <SelectItem value="none">None</SelectItem>
-                    {workOrders.map((w) => <SelectItem key={w.id} value={w.id}>{w.number}</SelectItem>)}
+                    {(workOrders || []).map((w) => <SelectItem key={w.id} value={w.id}>{w.number}</SelectItem>)}
                   </SelectContent>
                 </Select>
               </div>
               <div className="space-y-2">
                 <Label>Link to Equipment</Label>
                 <Select value={form.equipment_id || 'none'} onValueChange={(v) => {
-                  const eq = equipment.find((e) => e.id === v);
+                  const eq = (equipment || []).find((e) => e.id === v);
                   setForm({ 
                     ...form, 
                     equipment_id: v === 'none' ? null : v, 
@@ -623,7 +623,7 @@ export function RequisitionsPage() {
                   <SelectTrigger><SelectValue placeholder="Select Equipment..." /></SelectTrigger>
                   <SelectContent>
                     <SelectItem value="none">None</SelectItem>
-                    {equipment.map((e) => <SelectItem key={e.id} value={e.id}>{e.name} - {e.model}</SelectItem>)}
+                    {(equipment || []).map((e) => <SelectItem key={e.id} value={e.id}>{e.name} - {e.model}</SelectItem>)}
                   </SelectContent>
                 </Select>
               </div>
@@ -787,7 +787,7 @@ export function RequisitionsPage() {
                 <div className="space-y-2">
                   <Label className="text-base font-semibold">Requested Parts</Label>
                   <div className="border border-border rounded-lg divide-y divide-border">
-                    {requisitionItems.filter((i) => i.requisition_id === detailReq.id).map((item, idx) => (
+                    {(requisitionItems || []).filter((i) => i.requisition_id === detailReq.id).map((item, idx) => (
                       <div key={item.id} className="flex items-center justify-between p-3">
                         <div>
                           <p className="text-sm font-medium">

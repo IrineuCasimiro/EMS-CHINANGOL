@@ -114,7 +114,6 @@ const generateOfficialTravelLogPDF = (log: TravelLog, vehicle?: any) => {
   drawSectionHeader('2. DEPARTURE & RETURN CONTROL', y);
   y += 5.5;
 
-  // Header Azul Claro para DEPARTURE e RETURN (Corrigido)
   doc.setFillColor(235, 243, 250);
   doc.rect(15, y, 90, 5, 'F'); doc.rect(15, y, 90, 5);
   doc.rect(105, y, 90, 5, 'F'); doc.rect(105, y, 90, 5);
@@ -237,7 +236,7 @@ function makeChecklist(): ChecklistItem[] {
 }
 
 export function TravelLogsPage() {
-  const { travelLogs, equipment, saveTravelLog, deleteTravelLog } = useData();
+  const { travelLogs = [], equipment = [], saveTravelLog, deleteTravelLog } = useData();
   const { profile } = useAuth();
   const { toast } = useToast();
   const { generateAndSave } = usePdfGenerator();
@@ -254,10 +253,12 @@ export function TravelLogsPage() {
   const canEdit = profile?.role === 'admin' || profile?.role === 'user';
   const canDelete = profile?.role === 'admin';
 
-  const vehicles = equipment.filter((e) => e.category === 'support_vehicle' || e.category === 'light_vehicle');
+  const vehicles = useMemo(() => {
+    return (equipment || []).filter((e) => e.category === 'support_vehicle' || e.category === 'light_vehicle');
+  }, [equipment]);
 
   const filtered = useMemo(() => {
-    return travelLogs.filter((tl) => {
+    return (travelLogs || []).filter((tl) => {
       const matchSearch = !search ||
         tl.number?.toLowerCase().includes(search.toLowerCase()) ||
         tl.destination?.toLowerCase().includes(search.toLowerCase()) ||
@@ -274,7 +275,7 @@ export function TravelLogsPage() {
   const openCreate = () => {
     setEditing(null);
     setForm({
-      number: generateNumber('GV', travelLogs.map((tl) => tl.number)),
+      number: generateNumber('GV', (travelLogs || []).map((tl) => tl.number)),
       status: 'planned',
       fuel_start: 'full',
       fuel_end: 'full',
@@ -351,7 +352,7 @@ export function TravelLogsPage() {
     setDeleteId(null);
   };
 
-  const getVehicle = (id: string | null) => (id ? equipment.find((e) => e.id === id) : undefined);
+  const getVehicle = (id: string | null) => (id ? (equipment || []).find((e) => e.id === id) : undefined);
 
   const handlePreview = (tl: TravelLog) => {
     const doc = generateOfficialTravelLogPDF(tl, getVehicle(tl.vehicle_id));
@@ -486,7 +487,7 @@ export function TravelLogsPage() {
                 <Select
                   value={form.vehicle_id || 'none'}
                   onValueChange={(v) => {
-                    const veh = equipment.find((e) => e.id === v);
+                    const veh = (equipment || []).find((e) => e.id === v);
                     setForm({
                       ...form,
                       vehicle_id: v === 'none' ? null : v,
