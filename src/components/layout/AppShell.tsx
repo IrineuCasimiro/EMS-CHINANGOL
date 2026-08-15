@@ -2,20 +2,36 @@ import { useState, type ReactNode } from 'react';
 import { cn } from '@/lib/utils';
 import { useAuth } from '@/contexts/AuthContext';
 import { useTheme } from '@/contexts/ThemeContext';
-import { NAV_ITEMS, ROLE_LABELS, ROLE_COLORS } from '@/lib/constants';
+import { ROLE_LABELS, ROLE_COLORS } from '@/lib/constants';
 import { Button } from '@/components/ui/button';
 import { Avatar, AvatarFallback } from '@/components/ui/avatar';
 import { Badge } from '@/components/ui/badge';
 import { Sheet, SheetContent, SheetTrigger, SheetHeader, SheetTitle } from '@/components/ui/sheet';
 import {
-  LayoutDashboard, Truck, ClipboardCheck, Wrench, Route, Package, FileText, ShieldCheck,
-  Menu, Sun, Moon, LogOut, HardHat, Languages,
+  LayoutDashboard, Truck, Wrench, Route, Package, ShieldCheck,
+  Menu, Sun, Moon, LogOut, HardHat,
 } from 'lucide-react';
 import type { LucideIcon } from 'lucide-react';
 
 const ICONS: Record<string, LucideIcon> = {
-  LayoutDashboard, Truck, ClipboardCheck, Wrench, Route, Package, FileText, ShieldCheck,
+  LayoutDashboard, Truck, Wrench, Route, Package, ShieldCheck,
 };
+
+interface NavItem {
+  id: string;
+  label: string;
+  icon: string;
+  adminOnly?: boolean;
+}
+
+const NAV_ITEMS: NavItem[] = [
+  { id: 'dashboard', label: 'Dashboard', icon: 'LayoutDashboard' },
+  { id: 'equipment', label: 'Equipment', icon: 'Truck' },
+  { id: 'work-orders', label: 'Work Orders', icon: 'Wrench' },
+  { id: 'travel-logs', label: 'Travel Logs', icon: 'Route' },
+  { id: 'requisitions', label: 'Requisitions', icon: 'Package' },
+  { id: 'admin', label: 'Admin Panel', icon: 'ShieldCheck', adminOnly: true },
+];
 
 interface AppShellProps {
   activeView: string;
@@ -25,10 +41,10 @@ interface AppShellProps {
 
 export function AppShell({ activeView, onNavigate, children }: AppShellProps) {
   const { profile, signOut } = useAuth();
-  const { theme, toggleTheme, language, toggleLanguage, t } = useTheme();
+  const { theme, toggleTheme } = useTheme();
   const [mobileOpen, setMobileOpen] = useState(false);
 
-  const navItems = NAV_ITEMS.filter((item) => !('adminOnly' in item && item.adminOnly) || profile?.role === 'admin');
+  const navItems = NAV_ITEMS.filter((item) => !item.adminOnly || profile?.role === 'admin');
 
   const initials = (profile?.full_name || 'U')
     .split(' ')
@@ -70,7 +86,7 @@ export function AppShell({ activeView, onNavigate, children }: AppShellProps) {
               )}
             >
               <Icon className={cn('w-4 h-4 shrink-0', isActive ? 'text-white' : 'text-white/50 group-hover:text-white')} />
-              <span className="truncate">{t(item.labelKey)}</span>
+              <span className="truncate">{item.label}</span>
               {isActive && <div className="absolute left-0 top-1/2 -translate-y-1/2 w-1 h-6 bg-white rounded-r-full" />}
             </button>
           );
@@ -97,7 +113,7 @@ export function AppShell({ activeView, onNavigate, children }: AppShellProps) {
           className="w-full mt-2 text-white/50 hover:text-white hover:bg-white/5 justify-start"
         >
           <LogOut className="w-4 h-4 mr-2" />
-          {t('signOut')}
+          Sign Out
         </Button>
       </div>
     </div>
@@ -132,7 +148,7 @@ export function AppShell({ activeView, onNavigate, children }: AppShellProps) {
           <div className="flex items-center gap-3 lg:gap-0">
             <div className="lg:hidden w-10" />
             <p className="text-sm text-muted-foreground hidden sm:block">
-              {NAV_ITEMS.find((i) => i.id === activeView) ? t(NAV_ITEMS.find((i) => i.id === activeView)!.labelKey) : t('dashboard')}
+              {NAV_ITEMS.find((i) => i.id === activeView)?.label || 'Dashboard'}
             </p>
           </div>
           <div className="flex items-center gap-2">
@@ -141,10 +157,6 @@ export function AppShell({ activeView, onNavigate, children }: AppShellProps) {
                 {ROLE_LABELS[profile.role]}
               </Badge>
             )}
-            <Button variant="ghost" size="icon" onClick={toggleLanguage} className="h-9 w-9" title="Switch language">
-              <Languages className="w-4 h-4" />
-              <span className="ml-1 text-xs font-bold">{language.toUpperCase()}</span>
-            </Button>
             <Button variant="ghost" size="icon" onClick={toggleTheme} className="h-9 w-9">
               {theme === 'dark' ? <Sun className="w-4 h-4" /> : <Moon className="w-4 h-4" />}
             </Button>

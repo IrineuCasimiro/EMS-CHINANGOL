@@ -24,7 +24,7 @@ import { previewPDF, downloadPDF, usePdfGenerator } from '@/lib/pdf';
 import type { WorkOrder, WorkOrderStatus, Equipment, PartsRequisitionItem } from '@/types';
 import { useToast } from '@/hooks/use-toast';
 
-// --- GERADOR DE PDF FIEL AO MODELO CHINANGOL, LDA / SANY DEPARTMENT ---
+// --- CHINANGOL, LDA / SANY DEPARTMENT PDF GENERATOR ---
 export const generateWorkOrderPDF = (
   wo: WorkOrder,
   equipment?: Equipment,
@@ -42,7 +42,7 @@ export const generateWorkOrderPDF = (
   const contentWidth = pageWidth - margin * 2;
   let y = 12;
 
-  // --- CABEÇALHO PRINCIPAL ---
+  // --- MAIN HEADER ---
   doc.setFont('helvetica', 'bold');
   doc.setFontSize(14);
   doc.setTextColor(0, 0, 0);
@@ -55,8 +55,8 @@ export const generateWorkOrderPDF = (
   doc.setFont('helvetica', 'bold');
   doc.setFontSize(11);
   doc.setTextColor(0, 0, 0);
-  doc.text('FOLHA DE OBRA / ORDEM DE', pageWidth - margin, y + 1, { align: 'right' });
-  doc.text('SERVIÇO', pageWidth - margin, y + 5.5, { align: 'right' });
+  doc.text('WORK ORDER / SERVICE', pageWidth - margin, y + 1, { align: 'right' });
+  doc.text('SHEET', pageWidth - margin, y + 5.5, { align: 'right' });
 
   const boxWidth = 46;
   const boxHeight = 7.5;
@@ -86,8 +86,8 @@ export const generateWorkOrderPDF = (
     return currentY + 5.5;
   };
 
-  // --- SEÇÃO 1: IDENTIFICAÇÃO ---
-  y = drawSectionHeader('1. IDENTIFICAÇÃO DO EQUIPAMENTO & CLIENTE', y);
+  // --- SECTION 1: IDENTIFICATION ---
+  y = drawSectionHeader('1. EQUIPMENT & CLIENT IDENTIFICATION', y);
 
   const eqCode = equipment ? `${equipment.code || ''} ${equipment.name || ''}`.trim() : '';
   const eqModel = equipment ? equipment.model || '' : '';
@@ -111,23 +111,23 @@ export const generateWorkOrderPDF = (
     },
     body: [
       [
-        { content: 'ID DO EQUIPAMENTO\n' + eqCode, halign: 'center' },
-        { content: 'MODELO\n' + eqModel, halign: 'center' },
-        { content: 'No DE SÉRIE / CHASSI\n' + serialNo, halign: 'center' },
-        { content: 'DATA DE ENTRADA\n' + entryDate, halign: 'center' },
+        { content: 'EQUIPMENT ID\n' + eqCode, halign: 'center' },
+        { content: 'MODEL\n' + eqModel, halign: 'center' },
+        { content: 'SERIAL / CHASSIS Nº\n' + serialNo, halign: 'center' },
+        { content: 'ENTRY DATE\n' + entryDate, halign: 'center' },
       ],
       [
-        { content: 'HORÍMETRO / KM ATUAL\n' + horometer, halign: 'center' },
-        { content: 'CLIENTE / PROJECTO\n' + clientProject, halign: 'center' },
-        { content: 'TÉCNICO / RECEPCIONISTA\n' + receptionist, colSpan: 2, halign: 'center' },
+        { content: 'CURRENT HOROMETER / KM\n' + horometer, halign: 'center' },
+        { content: 'CLIENT / PROJECT\n' + clientProject, halign: 'center' },
+        { content: 'TECHNICIAN / RECEPTIONIST\n' + receptionist, colSpan: 2, halign: 'center' },
       ],
     ],
   });
 
   y = (doc as any).lastAutoTable.finalY + 3;
 
-  // --- SEÇÃO 2: DIAGNÓSTICO ---
-  y = drawSectionHeader('2. DIAGNÓSTICO TÉCNICO & TRABALHOS SOLICITADOS', y);
+  // --- SECTION 2: DIAGNOSIS ---
+  y = drawSectionHeader('2. TECHNICAL DIAGNOSIS & REQUESTED TASKS', y);
   const diagHeight = 28;
   doc.setDrawColor(160, 200, 230);
   doc.setLineWidth(0.3);
@@ -146,8 +146,8 @@ export const generateWorkOrderPDF = (
   }
   y += diagHeight + 3;
 
-  // --- SEÇÃO 3: CHECKLIST ---
-  y = drawSectionHeader('3. INSPECÇÃO E CHECKLIST DE ENTRADA', y);
+  // --- SECTION 3: CHECKLIST ---
+  y = drawSectionHeader('3. INSPECTION AND ENTRY CHECKLIST', y);
   const checklistHeight = 26;
   doc.setDrawColor(160, 200, 230);
   doc.rect(margin, y, contentWidth, checklistHeight);
@@ -164,22 +164,22 @@ export const generateWorkOrderPDF = (
   doc.setFontSize(7.5);
   doc.setTextColor(0, 0, 0);
 
-  doc.text(`Nível de Óleo do Motor${getCheckSymbol('motor')}`, col1X, y + 4.5);
-  doc.text(`Nível de Óleo Hidráulico${getCheckSymbol('hidráulico')}`, col1X, y + 9.0);
-  doc.text(`Líquido de Refrigeração${getCheckSymbol('radiador')}`, col1X, y + 13.5);
-  doc.text(`Filtros de Ar e Combustível${getCheckSymbol('filtros')}`, col1X, y + 18.0);
-  doc.text(`Estado das Lagartas / Pneus${getCheckSymbol('pneus')}`, col1X, y + 22.5);
+  doc.text(`Engine Oil Level${getCheckSymbol('motor')}`, col1X, y + 4.5);
+  doc.text(`Hydraulic Oil Level${getCheckSymbol('hidráulico')}`, col1X, y + 9.0);
+  doc.text(`Coolant Liquid${getCheckSymbol('radiador')}`, col1X, y + 13.5);
+  doc.text(`Air and Fuel Filters${getCheckSymbol('filtros')}`, col1X, y + 18.0);
+  doc.text(`Tracks / Tires State${getCheckSymbol('pneus')}`, col1X, y + 22.5);
 
-  doc.text(`Sistema Elétrico e Luzes${getCheckSymbol('elétrico')}`, col2X, y + 4.5);
-  doc.text(`Vidros e Cabine${getCheckSymbol('vidros')}`, col2X, y + 9.0);
-  doc.text(`Dispositivos de Segurança${getCheckSymbol('segurança')}`, col2X, y + 13.5);
-  doc.text(`Extintor${getCheckSymbol('extintor')}`, col2X, y + 18.0);
-  doc.text('NÍVEL COMBUSTÍVEL: E  ⊔  1/4  ⊔  1/2  ⊔  3/4  ⊔  F', col2X, y + 22.5);
+  doc.text(`Electrical System & Lights${getCheckSymbol('elétrico')}`, col2X, y + 4.5);
+  doc.text(`Glass & Cab${getCheckSymbol('vidros')}`, col2X, y + 9.0);
+  doc.text(`Safety Devices${getCheckSymbol('segurança')}`, col2X, y + 13.5);
+  doc.text(`Extinguisher${getCheckSymbol('extintor')}`, col2X, y + 18.0);
+  doc.text('FUEL LEVEL: E  ⊔  1/4  ⊔  1/2  ⊔  3/4  ⊔  F', col2X, y + 22.5);
 
   y += checklistHeight + 3;
 
-  // --- SEÇÃO 4: PEÇAS ---
-  y = drawSectionHeader('4. PEÇAS NECESSÁRIAS / SUBSTITUÍDAS (PART REQUEST)', y);
+  // --- SECTION 4: PARTS ---
+  y = drawSectionHeader('4. REQUIRED / REPLACED PARTS (PART REQUEST)', y);
   const partsData = (wo?.parts_replaced && wo.parts_replaced.length > 0)
     ? wo.parts_replaced.map((p: any) => [p.reference || '', p.description || '', p.quantity?.toString() || '1'])
     : (requisitionItems ?? []).length > 0
@@ -198,14 +198,14 @@ export const generateWorkOrderPDF = (
     styles: { fontSize: 8, cellPadding: 2, textColor: [0, 0, 0], lineColor: [160, 200, 230], lineWidth: 0.3, font: 'helvetica' },
     headStyles: { fillColor: [70, 160, 215], textColor: [255, 255, 255], fontStyle: 'bold', halign: 'center' },
     columnStyles: { 0: { cellWidth: 50, halign: 'center' }, 1: { cellWidth: 'auto', halign: 'left' }, 2: { cellWidth: 45, halign: 'center' } },
-    head: [['REFERÊNCIA', 'DESCRIÇÃO DA PEÇA', 'QUANTIDADE']],
+    head: [['REFERENCE', 'PART DESCRIPTION', 'QUANTITY']],
     body: partsData,
   });
 
   y = (doc as any).lastAutoTable.finalY + 3;
 
-  // --- SEÇÃO 5: OBSERVAÇÕES E ASSINATURAS ---
-  y = drawSectionHeader('5. OBSERVAÇÕES DE SAÍDA / NOTAS ADICIONAIS', y);
+  // --- SECTION 5: OBSERVATIONS AND SIGNATURES ---
+  y = drawSectionHeader('5. EXIT OBSERVATIONS / ADDITIONAL NOTES', y);
   const obsHeight = 24;
   doc.setDrawColor(160, 200, 230);
   doc.rect(margin, y, contentWidth, obsHeight);
@@ -236,14 +236,14 @@ export const generateWorkOrderPDF = (
 
   doc.setFont('helvetica', 'bold');
   doc.setFontSize(8);
-  doc.text(wo?.mechanic_sign || 'MECÂNICO / TÉCNICO', sig1X + sigWidth / 2, y + 4, { align: 'center' });
-  doc.text(wo?.engineer_sign || 'ENGENHEIRO', sig2X + sigWidth / 2, y + 4, { align: 'center' });
-  doc.text(wo?.client_sign || 'CLIENTE', sig3X + sigWidth / 2, y + 4, { align: 'center' });
+  doc.text(wo?.mechanic_sign || 'MECHANIC / TECHNICIAN', sig1X + sigWidth / 2, y + 4, { align: 'center' });
+  doc.text(wo?.engineer_sign || 'ENGINEER', sig2X + sigWidth / 2, y + 4, { align: 'center' });
+  doc.text(wo?.client_sign || 'CLIENT', sig3X + sigWidth / 2, y + 4, { align: 'center' });
 
   return doc;
 };
 
-// --- COMPONENTE PRINCIPAL ---
+// --- MAIN COMPONENT ---
 const STATUSES: { value: WorkOrderStatus; label: string }[] = [
   { value: 'draft', label: 'Draft' },
   { value: 'open', label: 'Open' },
@@ -286,7 +286,6 @@ export function WorkOrdersPage() {
   const canEdit = profile?.role === 'admin' || profile?.role === 'user';
   const canDelete = profile?.role === 'admin';
 
-  // Blindagem com (workOrders ?? []) para evitar erro se a lista vier undefined/null
   const filtered = useMemo(() => {
     return (workOrders ?? []).filter((w) => {
       const matchSearch = !search ||
@@ -338,7 +337,7 @@ export function WorkOrdersPage() {
 
   const handleSave = async () => {
     if (!form.number) {
-      toast({ title: 'O número da OS é obrigatório', variant: 'destructive' });
+      toast({ title: 'Work Order number is required', variant: 'destructive' });
       return;
     }
 
@@ -351,14 +350,14 @@ export function WorkOrdersPage() {
 
       const { error } = await saveWorkOrder(payload as WorkOrder);
       if (error) {
-        toast({ title: 'Erro ao guardar Work Order', description: error, variant: 'destructive' });
+        toast({ title: 'Error saving Work Order', description: error, variant: 'destructive' });
         return;
       }
 
-      toast({ title: editing ? 'Work Order atualizada com sucesso' : 'Work Order criada com sucesso' });
+      toast({ title: editing ? 'Work Order updated successfully' : 'Work Order created successfully' });
       setDialogOpen(false);
     } catch (err: any) {
-      toast({ title: 'Erro ao guardar Work Order', description: err.message, variant: 'destructive' });
+      toast({ title: 'Error saving Work Order', description: err.message, variant: 'destructive' });
     } finally {
       setIsSaving(false);
     }
@@ -368,9 +367,9 @@ export function WorkOrdersPage() {
     if (!deleteId) return;
     const { error } = await deleteWorkOrder(deleteId);
     if (error) {
-      toast({ title: 'Erro ao eliminar Work Order', description: error, variant: 'destructive' });
+      toast({ title: 'Error deleting Work Order', description: error, variant: 'destructive' });
     } else {
-      toast({ title: 'Work Order eliminada com sucesso' });
+      toast({ title: 'Work Order deleted successfully' });
     }
     setDeleteId(null);
   };
@@ -379,9 +378,9 @@ export function WorkOrdersPage() {
     const updates: Partial<WorkOrder> = { id: wo.id, status, updated_at: new Date().toISOString() };
     const { error } = await saveWorkOrder({ ...wo, ...updates } as WorkOrder);
     if (error) {
-      toast({ title: 'Erro ao atualizar estado', description: error, variant: 'destructive' });
+      toast({ title: 'Error updating status', description: error, variant: 'destructive' });
     } else {
-      toast({ title: `Estado alterado para ${WORK_ORDER_STATUS_LABELS[status] || status}` });
+      toast({ title: `Status changed to ${WORK_ORDER_STATUS_LABELS[status] || status}` });
       if (detailWO?.id === wo.id) {
         setDetailWO({ ...detailWO, ...updates } as WorkOrder);
       }
@@ -408,9 +407,9 @@ export function WorkOrdersPage() {
     const doc = generateWorkOrderPDF(wo, eq, [], reqItems);
     const { error } = await generateAndSave(doc, 'work_order', wo.id, wo.number, `Work Order ${wo.number}`);
     if (error) {
-      toast({ title: 'Erro ao guardar PDF', description: error, variant: 'destructive' });
+      toast({ title: 'Error saving PDF', description: error, variant: 'destructive' });
     } else {
-      toast({ title: 'PDF gerado e guardado no sistema', description: `${wo.number}.pdf guardado nos documentos` });
+      toast({ title: 'PDF generated and saved to system', description: `${wo.number}.pdf saved to documents` });
     }
   };
 
@@ -418,11 +417,11 @@ export function WorkOrdersPage() {
     <div>
       <PageHeader
         title="Work Orders"
-        description="Gestão de ordens de serviço e manutenção de equipamentos"
+        description="Management of service orders and equipment maintenance"
         action={canEdit && (
           <Button onClick={openCreate}>
             <Plus className="w-4 h-4 mr-1" />
-            Nova Ordem de Serviço
+            New Work Order
           </Button>
         )}
       />
@@ -430,24 +429,24 @@ export function WorkOrdersPage() {
       <FilterBar
         search={search}
         onSearchChange={(v) => { setSearch(v); setPage(1); }}
-        searchPlaceholder="Pesquisar por número da OS, cliente, técnico..."
+        searchPlaceholder="Search by work order number, client, technician..."
         filters={<StatusFilter value={statusFilter} onChange={(v) => { setStatusFilter(v); setPage(1); }} options={STATUSES} />}
       />
 
       <Card>
         <CardContent className="p-0">
           {paginated.length === 0 ? (
-            <EmptyState icon={<Wrench className="w-12 h-12" />} title="Nenhuma Work Order encontrada" description="Crie a sua primeira ordem de serviço de equipamento" />
+            <EmptyState icon={<Wrench className="w-12 h-12" />} title="No Work Orders found" description="Create your first equipment service order" />
           ) : (
             <Table>
               <TableHeader>
                 <TableRow>
-                  <TableHead>Número OS</TableHead>
-                  <TableHead className="hidden md:table-cell">Cliente / Projecto</TableHead>
-                  <TableHead>Técnico</TableHead>
-                  <TableHead className="hidden sm:table-cell">Data de Entrada</TableHead>
-                  <TableHead>Estado</TableHead>
-                  <TableHead className="text-right">Ações</TableHead>
+                  <TableHead>WO Number</TableHead>
+                  <TableHead className="hidden md:table-cell">Client / Project</TableHead>
+                  <TableHead>Technician</TableHead>
+                  <TableHead className="hidden sm:table-cell">Entry Date</TableHead>
+                  <TableHead>Status</TableHead>
+                  <TableHead className="text-right">Actions</TableHead>
                 </TableRow>
               </TableHeader>
               <TableBody>
@@ -470,10 +469,10 @@ export function WorkOrdersPage() {
                       </TableCell>
                       <TableCell className="text-right" onClick={(e) => e.stopPropagation()}>
                         <div className="flex justify-end gap-1">
-                          <Button variant="ghost" size="icon" className="h-8 w-8" onClick={() => handlePreview(wo)} title="Visualizar PDF">
+                          <Button variant="ghost" size="icon" className="h-8 w-8" onClick={() => handlePreview(wo)} title="Preview PDF">
                             <Eye className="w-4 h-4" />
                           </Button>
-                          <Button variant="ghost" size="icon" className="h-8 w-8" onClick={() => handleDownload(wo)} title="Descarregar PDF">
+                          <Button variant="ghost" size="icon" className="h-8 w-8" onClick={() => handleDownload(wo)} title="Download PDF">
                             <Printer className="w-4 h-4" />
                           </Button>
                           <Button variant="ghost" size="icon" className="h-8 w-8" onClick={() => setDetailWO(wo)}>
@@ -504,15 +503,15 @@ export function WorkOrdersPage() {
         <Pagination page={page} totalPages={totalPages} onPageChange={setPage} total={filtered.length} pageSize={PAGE_SIZE} />
       )}
 
-      {/* Modal Multi-Abas Criar / Editar */}
+      {/* Create / Edit Multi-Tab Dialog */}
       <Dialog open={dialogOpen} onOpenChange={setDialogOpen}>
         <DialogContent className="max-w-3xl max-h-[90vh] overflow-y-auto">
           <DialogHeader>
-            <DialogTitle>{editing ? `Editar Ordem de Serviço (${form.number})` : 'Nova Ordem de Serviço'}</DialogTitle>
-            <DialogDescription>Preencha os campos em cada uma das abas abaixo</DialogDescription>
+            <DialogTitle>{editing ? `Edit Work Order (${form.number})` : 'New Work Order'}</DialogTitle>
+            <DialogDescription>Fill out the fields in each of the tabs below</DialogDescription>
           </DialogHeader>
 
-          {/* Abas Negação / Navegação */}
+          {/* Tab Navigation */}
           <div className="flex border-b border-border mb-4 gap-2">
             {[
               { id: 'general', label: 'General' },
@@ -537,7 +536,7 @@ export function WorkOrdersPage() {
           </div>
 
           <div className="space-y-4 py-2 min-h-[300px]">
-            {/* ABA 1: GENERAL */}
+            {/* TAB 1: GENERAL */}
             {activeTab === 'general' && (
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                 <div className="space-y-2">
@@ -555,9 +554,9 @@ export function WorkOrdersPage() {
                       hour_km_actual: eq?.horometer ? String(eq.horometer) : form.hour_km_actual,
                     });
                   }}>
-                    <SelectTrigger><SelectValue placeholder="Selecionar Equipamento..." /></SelectTrigger>
+                    <SelectTrigger><SelectValue placeholder="Select Equipment..." /></SelectTrigger>
                     <SelectContent>
-                      <SelectItem value="none">Nenhum</SelectItem>
+                      <SelectItem value="none">None</SelectItem>
                       {(equipment ?? []).map((e) => <SelectItem key={e.id} value={e.id}>{e.code} - {e.name}</SelectItem>)}
                     </SelectContent>
                   </Select>
@@ -598,7 +597,7 @@ export function WorkOrdersPage() {
               </div>
             )}
 
-            {/* ABA 2: DIAGNOSIS */}
+            {/* TAB 2: DIAGNOSIS */}
             {activeTab === 'diagnosis' && (
               <div className="space-y-4">
                 <h3 className="text-sm font-semibold text-muted-foreground">2. Technical Diagnosis & Requested Tasks</h3>
@@ -637,7 +636,7 @@ export function WorkOrdersPage() {
               </div>
             )}
 
-            {/* ABA 3: CHECKLIST */}
+            {/* TAB 3: CHECKLIST */}
             {activeTab === 'checklist' && (
               <div className="space-y-4">
                 <h3 className="text-sm font-semibold text-muted-foreground">3. Entry Inspection & Checklist</h3>
@@ -661,7 +660,7 @@ export function WorkOrdersPage() {
               </div>
             )}
 
-            {/* ABA 4: PARTS REQUIRED */}
+            {/* TAB 4: PARTS REQUIRED */}
             {activeTab === 'parts' && (
               <div className="space-y-4">
                 <h3 className="text-sm font-semibold text-muted-foreground">4. Required / Replaced Parts (Part Request)</h3>
@@ -718,7 +717,7 @@ export function WorkOrdersPage() {
               </div>
             )}
 
-            {/* ABA 5: SIGN-OFF */}
+            {/* TAB 5: SIGN-OFF */}
             {activeTab === 'signoff' && (
               <div className="space-y-4">
                 <h3 className="text-sm font-semibold text-muted-foreground">5. Exit Observations & Sign-Off</h3>
@@ -762,7 +761,7 @@ export function WorkOrdersPage() {
           </div>
 
           <DialogFooter className="mt-4 border-t pt-3">
-            <Button variant="outline" onClick={() => setDialogOpen(false)}>Cancelar</Button>
+            <Button variant="outline" onClick={() => setDialogOpen(false)}>Cancel</Button>
             <Button onClick={handleSave} disabled={isSaving}>
               {isSaving && <Loader2 className="w-4 h-4 mr-2 animate-spin" />}
               {editing ? 'Save Changes' : 'Create Work Order'}
@@ -771,7 +770,7 @@ export function WorkOrdersPage() {
         </DialogContent>
       </Dialog>
 
-      {/* Modal Detalhes */}
+      {/* Details Dialog */}
       <Dialog open={!!detailWO} onOpenChange={(open) => !open && setDetailWO(null)}>
         <DialogContent className="max-w-2xl max-h-[90vh] overflow-y-auto">
           {detailWO && (
@@ -782,28 +781,28 @@ export function WorkOrdersPage() {
                   <StatusBadge status={detailWO.status} label={WORK_ORDER_STATUS_LABELS[detailWO.status]} />
                 </DialogTitle>
                 <DialogDescription>
-                  Técnico: {detailWO.assigned_technician || detailWO.technician_receptionist || 'N/A'} · Entrada: {detailWO.entry_date || 'N/A'}
+                  Technician: {detailWO.assigned_technician || detailWO.technician_receptionist || 'N/A'} · Entry: {detailWO.entry_date || 'N/A'}
                 </DialogDescription>
               </DialogHeader>
               <div className="space-y-4 py-4">
                 <div className="grid grid-cols-2 gap-3 text-sm p-3 bg-muted/40 rounded-lg">
-                  <div><span className="text-muted-foreground">Cliente:</span> <span className="font-medium">{detailWO.client_project || '—'}</span></div>
-                  <div><span className="text-muted-foreground">Chassi/Série:</span> <span className="font-medium">{detailWO.serial_chassis || '—'}</span></div>
-                  <div><span className="text-muted-foreground">Horímetro:</span> <span className="font-medium">{detailWO.hour_km_actual || '—'}</span></div>
-                  <div><span className="text-muted-foreground">Data Entrada:</span> <span className="font-medium">{detailWO.entry_date || '—'}</span></div>
+                  <div><span className="text-muted-foreground">Client:</span> <span className="font-medium">{detailWO.client_project || '—'}</span></div>
+                  <div><span className="text-muted-foreground">Chassis/Serial:</span> <span className="font-medium">{detailWO.serial_chassis || '—'}</span></div>
+                  <div><span className="text-muted-foreground">Horometer:</span> <span className="font-medium">{detailWO.hour_km_actual || '—'}</span></div>
+                  <div><span className="text-muted-foreground">Entry Date:</span> <span className="font-medium">{detailWO.entry_date || '—'}</span></div>
                 </div>
 
                 {detailWO.exit_observations && (
                   <div className="space-y-1">
-                    <Label className="text-xs text-muted-foreground">Observações de Saída</Label>
+                    <Label className="text-xs text-muted-foreground">Exit Observations</Label>
                     <p className="text-sm p-3 bg-muted/20 border rounded-md whitespace-pre-line">{detailWO.exit_observations}</p>
                   </div>
                 )}
 
                 <div className="flex flex-wrap gap-2 pt-2 border-t">
-                  <Button size="sm" variant="outline" onClick={() => handlePreview(detailWO)}><Eye className="w-4 h-4 mr-1" />Visualizar PDF</Button>
-                  <Button size="sm" variant="outline" onClick={() => handleDownload(detailWO)}><Printer className="w-4 h-4 mr-1" />Descarregar PDF</Button>
-                  <Button size="sm" onClick={() => handleSaveAndUpload(detailWO)}><FileText className="w-4 h-4 mr-1" />Guardar nos Documentos</Button>
+                  <Button size="sm" variant="outline" onClick={() => handlePreview(detailWO)}><Eye className="w-4 h-4 mr-1" />Preview PDF</Button>
+                  <Button size="sm" variant="outline" onClick={() => handleDownload(detailWO)}><Printer className="w-4 h-4 mr-1" />Download PDF</Button>
+                  <Button size="sm" onClick={() => handleSaveAndUpload(detailWO)}><FileText className="w-4 h-4 mr-1" />Save to Documents</Button>
                 </div>
               </div>
             </>
@@ -815,9 +814,9 @@ export function WorkOrdersPage() {
         open={!!deleteId}
         onOpenChange={(open) => !open && setDeleteId(null)}
         onConfirm={handleDelete}
-        title="Eliminar Ordem de Serviço"
-        description="Esta ação é permanente e irá apagar esta Ordem de Serviço."
-        confirmLabel="Eliminar"
+        title="Delete Work Order"
+        description="This action is permanent and will delete this Work Order."
+        confirmLabel="Delete"
         destructive
       />
     </div>
