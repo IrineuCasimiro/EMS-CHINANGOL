@@ -16,7 +16,7 @@ import {
 import {
   Select, SelectContent, SelectItem, SelectTrigger, SelectValue,
 } from '@/components/ui/select';
-import { Truck, Plus, Pencil, Trash2 } from 'lucide-react';
+import { Truck, Plus, Pencil, Trash2, Loader2 } from 'lucide-react';
 import { EQUIPMENT_STATUS_LABELS } from '@/lib/constants';
 import type { Equipment, EquipmentStatus, EquipmentCategory } from '@/types';
 import { useToast } from '@/hooks/use-toast';
@@ -89,13 +89,17 @@ export function EquipmentPage() {
 
   const openEdit = (eq: Equipment) => {
     setEditing(eq);
-    setForm(eq);
+    setForm({ ...eq });
     setDialogOpen(true);
   };
 
   const handleSave = async () => {
     if (!form.name || !form.serial_number) {
-      toast({ title: 'Preencha os campos obrigatórios (Nome e Número de Série)', variant: 'destructive' });
+      toast({ 
+        title: 'Campos obrigatórios em falta', 
+        description: 'Por favor, preencha o Nome e o Número de Série.', 
+        variant: 'destructive' 
+      });
       return;
     }
 
@@ -103,6 +107,7 @@ export function EquipmentPage() {
 
     try {
       const payload = {
+        ...(editing?.id ? { id: editing.id } : {}),
         ...form,
         name: form.name.trim(),
         serial_number: form.serial_number.trim(),
@@ -116,16 +121,19 @@ export function EquipmentPage() {
       const { error } = await saveEquipment(payload);
 
       if (error) {
-        toast({ title: 'Erro ao salvar equipamento', description: error, variant: 'destructive' });
+        console.error('Erro ao salvar no Supabase:', error);
+        toast({ title: 'Erro ao salvar equipamento', description: String(error), variant: 'destructive' });
       } else {
-        toast({ title: editing ? 'Equipamento atualizado!' : 'Equipamento adicionado!' });
+        toast({ title: editing ? 'Equipamento atualizado com sucesso!' : 'Equipamento adicionado com sucesso!' });
         setDialogOpen(false);
         setForm({});
+        setEditing(null);
       }
-    } catch (err) {
+    } catch (err: any) {
+      console.error('Erro inesperado ao salvar:', err);
       toast({ 
         title: 'Erro inesperado', 
-        description: err instanceof Error ? err.message : 'Falha na operação', 
+        description: err?.message || 'Falha na operação', 
         variant: 'destructive' 
       });
     } finally {
@@ -135,13 +143,27 @@ export function EquipmentPage() {
 
   const handleDelete = async () => {
     if (!deleteId) return;
-    const { error } = await deleteEquipment(deleteId);
-    if (error) {
-      toast({ title: 'Erro ao apagar', description: error, variant: 'destructive' });
-    } else {
-      toast({ title: 'Equipamento removido com sucesso' });
+    try {
+      const { error } = await deleteEquipment(deleteId);
+      if (error) {
+        console.error('Erro ao apagar equipamento:', error);
+        toast({ 
+          title: 'Não foi possível apagar', 
+          description: 'Esta máquina possui registos associados (ex: Ordens de Trabalho ou Requisições).', 
+          variant: 'destructive' 
+        });
+      } else {
+        toast({ title: 'Equipamento removido com sucesso' });
+        setDeleteId(null);
+      }
+    } catch (err: any) {
+      console.error('Erro inesperado ao apagar:', err);
+      toast({ 
+        title: 'Erro ao apagar', 
+        description: err?.message || 'Erro desconhecido', 
+        variant: 'destructive' 
+      });
     }
-    setDeleteId(null);
   };
 
   return (
@@ -336,10 +358,11 @@ export function EquipmentPage() {
           </div>
 
           <DialogFooter>
-            <Button variant="outline" onClick={() => setDialogOpen(false)} disabled={saving}>
+            <Button type="button" variant="outline" onClick={() => setDialogOpen(false)} disabled={saving}>
               Cancel
             </Button>
-            <Button onClick={handleSave} disabled={saving}>
+            <Button type="button" onClick={handleSave} disabled={saving}>
+              {saving && <Loader2 className="w-4 h-4 mr-2 animate-spin" />}
               {saving ? 'Saving...' : editing ? 'Save Changes' : 'Add Equipment'}
             </Button>
           </DialogFooter>
