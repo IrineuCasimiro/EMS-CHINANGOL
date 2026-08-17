@@ -18,7 +18,13 @@ import {
 import {
   Select, SelectContent, SelectItem, SelectTrigger, SelectValue,
 } from '@/components/ui/select';
-import { Package, Plus, Pencil, Trash2, ChevronRight, X, Eye, Printer, Loader2, Wrench } from 'lucide-react';
+import {
+  Popover, PopoverTrigger, PopoverContent,
+} from '@/components/ui/popover';
+import {
+  Command, CommandInput, CommandList, CommandEmpty, CommandGroup, CommandItem,
+} from '@/components/ui/command';
+import { Package, Plus, Pencil, Trash2, ChevronRight, X, Eye, Printer, Loader2, Wrench, Check, ChevronsUpDown } from 'lucide-react';
 import { REQUISITION_STATUS_LABELS, formatDate, generateNumber } from '@/lib/constants';
 import { previewPDF, downloadPDF, usePdfGenerator } from '@/lib/pdf';
 import type { PartsRequisition, RequisitionStatus, PartsRequisitionItem } from '@/types';
@@ -107,7 +113,6 @@ export const generateRequisitionPDF = (
   doc.setLineWidth(0.35);
   doc.setFontSize(8.5);
 
-  // Formatação de data
   let formattedDate = req.date || '';
   if (!formattedDate && req.created_at) {
     try {
@@ -193,7 +198,6 @@ export const generateRequisitionPDF = (
   doc.setFont('Helvetica', 'normal');
   doc.text(req.hour_km_meter || '', 59, y + 4.2);
 
-  // Urgency Options
   const isUrgent = req.urgency === true;
   doc.setTextColor(isUrgent ? 220 : 0, 0, 0);
   doc.setFont('Helvetica', isUrgent ? 'bold' : 'normal');
@@ -208,7 +212,7 @@ export const generateRequisitionPDF = (
   // --- 5. PARTS TABLE (25 ROWS) ---
   y += rowH + 6;
 
-  const colWidths = [22, 18, 42, 92]; // ITEM N°, QUANT., PARTS ID, DESCRIPTION
+  const colWidths = [22, 18, 42, 92];
   const colX = [
     tableLeft,
     tableLeft + colWidths[0],
@@ -216,7 +220,6 @@ export const generateRequisitionPDF = (
     tableLeft + colWidths[0] + colWidths[1] + colWidths[2],
   ];
 
-  // Table Header
   const headerH = 5.5;
   doc.setFont('Helvetica', 'bold');
   doc.setFontSize(8.5);
@@ -233,7 +236,6 @@ export const generateRequisitionPDF = (
 
   y += headerH;
 
-  // 25 Table Rows
   const itemRowH = 5.2;
   doc.setFont('Helvetica', 'normal');
   doc.setFontSize(8);
@@ -246,10 +248,8 @@ export const generateRequisitionPDF = (
     doc.line(colX[2], y, colX[2], y + itemRowH);
     doc.line(colX[3], y, colX[3], y + itemRowH);
 
-    // Row Number
     doc.text(String(i), colX[0] + colWidths[0] / 2, y + 3.7, { align: 'center' });
 
-    // Row Data (if exists)
     if (item) {
       if (item.quantity !== undefined && item.quantity !== '') {
         doc.text(String(item.quantity), colX[1] + colWidths[1] / 2, y + 3.7, { align: 'center' });
@@ -297,6 +297,7 @@ export function RequisitionsPage() {
   const [pendingItems, setPendingItems] = useState<Partial<PartsRequisitionItem>[]>([]);
   const [newItem, setNewItem] = useState<Partial<PartsRequisitionItem>>({ quantity: 1, unit: 'UN' });
   const [isSaving, setIsSaving] = useState(false);
+  const [equipmentOpen, setEquipmentOpen] = useState(false); // Estado para controlar o Popover do equipamento
 
   const canEdit = profile?.role === 'admin' || profile?.role === 'user';
   const canApprove = profile?.role === 'admin';
@@ -468,6 +469,9 @@ export function RequisitionsPage() {
     }
   };
 
+  // Encontrar o equipamento selecionado atual para exibir o nome/modelo e número de série no gatilho
+  const selectedEquipment = (equipment || []).find((e) => e.id === form.equipment_id);
+
   return (
     <div>
       <PageHeader
@@ -609,24 +613,71 @@ export function RequisitionsPage() {
                   </SelectContent>
                 </Select>
               </div>
-              <div className="space-y-2">
+
+              {/* LINK TO EQUIPMENT - COMBOX SEARCH (NOME E NÚMERO DE SÉRIE) */}
+              <div className="space-y-2 flex flex-col">
                 <Label>Link to Equipment</Label>
-                <Select value={form.equipment_id || 'none'} onValueChange={(v) => {
-                  const eq = (equipment || []).find((e) => e.id === v);
-                  setForm({ 
-                    ...form, 
-                    equipment_id: v === 'none' ? null : v, 
-                    model: eq?.model || form.model, 
-                    serial_number: eq?.serial_number || form.serial_number 
-                  });
-                }}>
-                  <SelectTrigger><SelectValue placeholder="Select Equipment..." /></SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="none">None</SelectItem>
-                    {(equipment || []).map((e) => <SelectItem key={e.id} value={e.id}>{e.name} - {e.model}</SelectItem>)}
-                  </SelectContent>
-                </Select>
+                <Popover open={equipmentOpen} onOpenChange={setEquipmentOpen}>
+                  <PopoverTrigger asChild>
+                    <Button
+                      variant="outline"
+                      role="combobox"
+                      aria-expanded={equipmentOpen}
+                      className="justify-between font-normal"
+                    >
+                      {selectedEquipment 
+                        ? `${selectedEquipment.name} - ${selectedEquipment.model || ''} (${selectedEquipment.serial_number || 'No S/N'})` 
+                        : "Select Equipment..."}
+                      <ChevronsUpDown className="ml-2 h-4 w-4 shrink-0 opacity-50" />
+                    </Button>
+                  </PopoverTrigger>
+                  <PopoverContent className="w-[340px] p-0">
+                    <Command>
+                      <CommandInput placeholder="Search equipment by name or serial..." />
+                      <CommandList>
+                        <CommandEmpty>No equipment found.</CommandEmpty>
+                        <CommandGroup>
+                          <CommandItem
+                            value="none"
+                            onSelect={() => {
+                              setForm({ ...form, equipment_id: null });
+                              setEquipmentOpen(false);
+                            }}
+                          >
+                            <Check className={`mr-2 h-4 w-4 ${!form.equipment_id ? "opacity-100" : "opacity-0"}`} />
+                            None
+                          </CommandItem>
+                          {(equipment || []).map((eq) => {
+                            const displayText = `${eq.name} - ${eq.model || ''} (S/N: ${eq.serial_number || 'N/A'})`;
+                            return (
+                              <CommandItem
+                                key={eq.id}
+                                value={displayText}
+                                onSelect={() => {
+                                  setForm({
+                                    ...form,
+                                    equipment_id: eq.id,
+                                    model: eq.model || form.model,
+                                    serial_number: eq.serial_number || form.serial_number
+                                  });
+                                  setEquipmentOpen(false);
+                                }}
+                              >
+                                <Check className={`mr-2 h-4 w-4 ${form.equipment_id === eq.id ? "opacity-100" : "opacity-0"}`} />
+                                <div className="flex flex-col">
+                                  <span className="font-medium">{eq.name} - {eq.model}</span>
+                                  <span className="text-xs text-muted-foreground">S/N: {eq.serial_number || '—'}</span>
+                                </div>
+                              </CommandItem>
+                            );
+                          })}
+                        </CommandGroup>
+                      </CommandList>
+                    </Command>
+                  </PopoverContent>
+                </Popover>
               </div>
+
               <div className="space-y-2">
                 <Label>Requested By *</Label>
                 <Input value={form.requested_by || ''} onChange={(e) => setForm({ ...form, requested_by: e.target.value })} />

@@ -18,7 +18,7 @@ import {
 import {
   Select, SelectContent, SelectItem, SelectTrigger, SelectValue,
 } from '@/components/ui/select';
-import { Wrench, Plus, Pencil, Trash2, ChevronRight, Eye, Printer, Loader2, FileText, X } from 'lucide-react';
+import { Wrench, Plus, Pencil, Trash2, ChevronRight, Eye, Printer, Loader2, FileText, X, Search } from 'lucide-react';
 import { WORK_ORDER_STATUS_LABELS, generateNumber } from '@/lib/constants';
 import { previewPDF, downloadPDF, usePdfGenerator } from '@/lib/pdf';
 import type { WorkOrder, WorkOrderStatus, Equipment, PartsRequisitionItem } from '@/types';
@@ -283,6 +283,10 @@ export function WorkOrdersPage() {
   const [detailWO, setDetailWO] = useState<WorkOrder | null>(null);
   const [isSaving, setIsSaving] = useState(false);
 
+  // Equipment Search state inside Modal
+  const [eqSearchQuery, setEqSearchQuery] = useState('');
+  const [isEqDropdownOpen, setIsEqDropdownOpen] = useState(false);
+
   const canEdit = profile?.role === 'admin' || profile?.role === 'user';
   const canDelete = profile?.role === 'admin';
 
@@ -300,9 +304,26 @@ export function WorkOrdersPage() {
   const totalPages = Math.ceil(filtered.length / PAGE_SIZE) || 1;
   const paginated = filtered.slice((page - 1) * PAGE_SIZE, page * PAGE_SIZE);
 
+  // Filtered list of equipment for the searchable dropdown
+  const filteredEquipmentList = useMemo(() => {
+    if (!eqSearchQuery.trim()) return (equipment ?? []).slice(0, 20); // Limit initial view for performance
+    const q = eqSearchQuery.toLowerCase();
+    return (equipment ?? []).filter((e) => 
+      (e.code && e.code.toLowerCase().includes(q)) ||
+      (e.name && e.name.toLowerCase().includes(q)) ||
+      (e.model && e.model.toLowerCase().includes(q)) ||
+      (e.serial_number && e.serial_number.toLowerCase().includes(q))
+    ).slice(0, 30);
+  }, [equipment, eqSearchQuery]);
+
+  const selectedEquipmentObj = useMemo(() => {
+    return (equipment ?? []).find((e) => e.id === form.equipment_id);
+  }, [equipment, form.equipment_id]);
+
   const openCreate = () => {
     setEditing(null);
     setActiveTab('general');
+    setEqSearchQuery('');
     setForm({
       number: generateNumber('OS-2026', (workOrders ?? []).map((w) => w.number)),
       status: 'open',
@@ -323,6 +344,7 @@ export function WorkOrdersPage() {
   const openEdit = (wo: WorkOrder) => {
     setEditing(wo);
     setActiveTab('general');
+    setEqSearchQuery('');
     setForm({
       ...wo,
       diagnosis_lines: wo.diagnosis_lines?.length ? wo.diagnosis_lines : [{ text: '' }],
@@ -543,28 +565,79 @@ export function WorkOrdersPage() {
                   <Label>WO Number *</Label>
                   <Input value={form.number || ''} onChange={(e) => setForm({ ...form, number: e.target.value })} className="font-mono" />
                 </div>
-                <div className="space-y-2">
+
+                {/* SEARCHABLE EQUIPMENT SELECTOR */}
+                <div className="space-y-2 relative">
                   <Label>Equipment *</Label>
-                  <Select value={form.equipment_id || 'none'} onValueChange={(v) => {
-                    const eq = (equipment ?? []).find((e) => e.id === v);
-                    setForm({
-                      ...form,
-                      equipment_id: v === 'none' ? null : v,
-                      serial_chassis: eq?.serial_number || form.serial_chassis,
-                      hour_km_actual: eq?.horometer ? String(eq.horometer) : form.hour_km_actual,
-                    });
-                  }}>
-                    <SelectTrigger><SelectValue placeholder="Select Equipment..." /></SelectTrigger>
-                    <SelectContent>
-                      <SelectItem value="none">None</SelectItem>
-                      {(equipment ?? []).map((e) => (
-                        <SelectItem key={e.id} value={e.id}>
-                          {e.code ? `${e.code} - ` : ''}{e.name || e.model}{e.serial_number ? ` (S/N: ${e.serial_number})` : ''}
-                        </SelectItem>
-                      ))}
-                    </SelectContent>
-                  </Select>
+                  <div className="relative">
+                    <div
+                      className="flex items-center justify-between h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm ring-offset-background cursor-pointer"
+                      onClick={() => setIsEqDropdownOpen(!isEqDropdownOpen)}
+                    >
+                      <span className="truncate">
+                        {selectedEquipmentObj
+                          ? `${selectedEquipmentObj.code ? selectedEquipmentObj.code + ' - ' : ''}${selectedEquipmentObj.name || selectedEquipmentObj.model}${selectedEquipmentObj.serial_number ? ` (S/N: ${selectedEquipmentObj.serial_number})` : ''}`
+                          : 'Search and select equipment...'}
+                      </span>
+                      <Search className="w-4 h-4 opacity-50 ml-2 shrink-0" />
+                    </div>
+
+                    {isEqDropdownOpen && (
+                      <div className="absolute z-50 mt-1 w-full rounded-md border bg-popover text-popover-foreground shadow-md">
+                        <div className="p-2 border-b flex items-center gap-2">
+                          <Search className="w-4 h-4 opacity-50" />
+                          <input
+                            autoFocus
+                            className="w-full bg-transparent text-sm outline-none placeholder:text-muted-foreground"
+                            placeholder="Type code, name, model or S/N..."
+                            value={eqSearchQuery}
+                            onChange={(e) => setEqSearchQuery(e.target.value)}
+                          />
+                          {eqSearchQuery && (
+                            <button type="button" onClick={() => setEqSearchQuery('')} className="text-muted-foreground hover:text-foreground">
+                              <X className="w-4 h-4" />
+                            </button>
+                          )}
+                        </div>
+                        <div className="max-h-60 overflow-y-auto p-1">
+                          <div
+                            className="px-2 py-1.5 text-sm rounded-sm hover:bg-muted cursor-pointer text-muted-foreground"
+                            onClick={() => {
+                              setForm({ ...form, equipment_id: null });
+                              setIsEqDropdownOpen(false);
+                            }}
+                          >
+                            -- None --
+                          </div>
+                          {filteredEquipmentList.length === 0 ? (
+                            <div className="py-3 text-center text-sm text-muted-foreground">No equipment found</div>
+                          ) : (
+                            filteredEquipmentList.map((eq) => (
+                              <div
+                                key={eq.id}
+                                className={`px-2 py-2 text-sm rounded-sm hover:bg-muted cursor-pointer flex flex-col ${form.equipment_id === eq.id ? 'bg-muted/60 font-medium' : ''}`}
+                                onClick={() => {
+                                  setForm({
+                                    ...form,
+                                    equipment_id: eq.id,
+                                    serial_chassis: eq.serial_number || form.serial_chassis,
+                                    hour_km_actual: eq.horometer ? String(eq.horometer) : form.hour_km_actual,
+                                  });
+                                  setIsEqDropdownOpen(false);
+                                  setEqSearchQuery('');
+                                }}
+                              >
+                                <span>{eq.code ? `${eq.code} - ` : ''}{eq.name || eq.model}</span>
+                                {eq.serial_number && <span className="text-xs text-muted-foreground">S/N: {eq.serial_number}</span>}
+                              </div>
+                            ))
+                          )}
+                        </div>
+                      </div>
+                    )}
+                  </div>
                 </div>
+
                 <div className="space-y-2">
                   <Label>Serial / Chassis No.</Label>
                   <Input value={form.serial_chassis || ''} onChange={(e) => setForm({ ...form, serial_chassis: e.target.value })} />
