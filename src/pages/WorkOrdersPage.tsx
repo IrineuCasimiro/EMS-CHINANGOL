@@ -557,7 +557,11 @@ export function WorkOrdersPage() {
                     <SelectTrigger><SelectValue placeholder="Select Equipment..." /></SelectTrigger>
                     <SelectContent>
                       <SelectItem value="none">None</SelectItem>
-                      {(equipment ?? []).map((e) => <SelectItem key={e.id} value={e.id}>{e.code} - {e.name}</SelectItem>)}
+                      {(equipment ?? []).map((e) => (
+                        <SelectItem key={e.id} value={e.id}>
+                          {e.code ? `${e.code} - ` : ''}{e.name || e.model}{e.serial_number ? ` (S/N: ${e.serial_number})` : ''}
+                        </SelectItem>
+                      ))}
                     </SelectContent>
                   </Select>
                 </div>
@@ -822,3 +826,4 @@ export function WorkOrdersPage() {
     </div>
   );
 }
+```[cite: 5]
