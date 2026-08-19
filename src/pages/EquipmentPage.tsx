@@ -30,10 +30,10 @@ const CATEGORIES: { value: EquipmentCategory; label: string }[] = [
 ];
 
 const STATUSES: { value: EquipmentStatus; label: string }[] = [
-  { value: 'operational', label: 'Operational' },
-  { value: 'maintenance', label: 'Maintenance' },
-  { value: 'standby', label: 'Standby' },
-  { value: 'broken', label: 'Broken' },
+  { value: 'operational', label: 'operational' },
+  { value: 'maintenance', label: 'maintenance' },
+  { value: 'standby', label: 'standby' },
+  { value: 'broken', label: 'broken' },
 ];
 
 const PAGE_SIZE = 8;

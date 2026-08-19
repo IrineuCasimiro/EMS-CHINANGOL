@@ -13,10 +13,10 @@ export const ROLE_DESCRIPTIONS: Record<UserRole, string> = {
 export const ROLE_ORDER: UserRole[] = ['admin', 'user'];
 
 export const EQUIPMENT_STATUS_LABELS: Record<EquipmentStatus, string> = {
-  operational: 'Operational',
-  maintenance: 'In Maintenance',
+  operational: 'operational',
+  maintenance: 'maintenance',
   standby: 'Standby',
-  broken: 'Broken Down',
+  broken: 'Broken',
 };
 
 export const WORK_ORDER_STATUS_LABELS: Record<WorkOrderStatus, string> = {

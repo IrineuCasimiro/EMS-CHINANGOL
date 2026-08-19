@@ -9,12 +9,12 @@ import { Badge } from '@/components/ui/badge';
 import { Sheet, SheetContent, SheetTrigger, SheetHeader, SheetTitle } from '@/components/ui/sheet';
 import {
   LayoutDashboard, Truck, Wrench, Route, Package, ShieldCheck,
-  Menu, Sun, Moon, LogOut, HardHat,
+  Menu, Sun, Moon, LogOut, HardHat, ScrollText,
 } from 'lucide-react';
 import type { LucideIcon } from 'lucide-react';
 
 const ICONS: Record<string, LucideIcon> = {
-  LayoutDashboard, Truck, Wrench, Route, Package, ShieldCheck,
+  LayoutDashboard, Truck, Wrench, Route, Package, ShieldCheck, ScrollText,
 };
 
 interface NavItem {
@@ -30,6 +30,7 @@ const NAV_ITEMS: NavItem[] = [
   { id: 'work-orders', label: 'Work Orders', icon: 'Wrench' },
   { id: 'travel-logs', label: 'Travel Logs', icon: 'Route' },
   { id: 'requisitions', label: 'Requisitions', icon: 'Package' },
+  { id: 'delivery-terms', label: 'Delivery Terms', icon: 'ScrollText' },
   { id: 'admin', label: 'Admin Panel', icon: 'ShieldCheck', adminOnly: true },
 ];
 

@@ -9,6 +9,7 @@ import { EquipmentPage } from '@/pages/EquipmentPage';
 import { WorkOrdersPage } from '@/pages/WorkOrdersPage';
 import { TravelLogsPage } from '@/pages/TravelLogsPage';
 import { RequisitionsPage } from '@/pages/RequisitionsPage';
+import { DeliveryTermsPage } from '@/pages/DeliveryTermsPage';
 import { AdminPage } from '@/pages/AdminPage';
 import { Toaster } from '@/components/ui/sonner';
 
@@ -35,11 +36,10 @@ function AppContent() {
     switch (activeView) {
       case 'dashboard': return <Dashboard onNavigate={setActiveView} />;
       case 'equipment': return <EquipmentPage />;
-      case 'inspections': return <InspectionsPage />;
       case 'work-orders': return <WorkOrdersPage />;
       case 'travel-logs': return <TravelLogsPage />;
       case 'requisitions': return <RequisitionsPage />;
-      case 'documents': return <DocumentsPage />;
+      case 'delivery-terms': return <DeliveryTermsPage />;
       case 'admin': return <AdminPage />;
       default: return <Dashboard onNavigate={setActiveView} />;
     }

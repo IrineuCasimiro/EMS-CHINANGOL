@@ -2,16 +2,37 @@ import React, { createContext, useContext, useState, useEffect, ReactNode } from
 import { supabase } from '@/lib/supabase';
 import type { WorkOrder, Equipment, PartsRequisitionItem } from '@/types';
 
+// Interface completa para o Delivery Term
+export interface DeliveryTerm {
+  id?: string;
+  client: string;
+  address?: string;
+  responsible?: string;
+  equipment: string;
+  model?: string;
+  fabrication_year?: string;
+  serial_number?: string;
+  included_accessories?: string;
+  phone?: string;
+  delivery_location?: string;
+  chinangol_representative?: string;
+  delivery_date: string;
+  created_at?: string;
+}
+
 interface DataContextType {
   workOrders: WorkOrder[];
   equipment: Equipment[];
   requisitionItems: PartsRequisitionItem[];
+  deliveryTerms: DeliveryTerm[];
   loading: boolean;
   refreshData: () => Promise<void>;
   saveWorkOrder: (wo: WorkOrder) => Promise<{ success: boolean; error?: string }>;
   deleteWorkOrder: (id: string) => Promise<{ success: boolean; error?: string }>;
   saveEquipment: (eq: Partial<Equipment>) => Promise<{ success: boolean; error?: string }>;
   deleteEquipment: (id: string) => Promise<{ success: boolean; error?: string }>;
+  saveDeliveryTerm: (term: DeliveryTerm) => Promise<{ success: boolean; error?: string }>;
+  deleteDeliveryTerm: (id: string) => Promise<{ success: boolean; error?: string }>;
 }
 
 const DataContext = createContext<DataContextType | undefined>(undefined);
@@ -20,6 +41,7 @@ export function DataProvider({ children }: { children: ReactNode }) {
   const [workOrders, setWorkOrders] = useState<WorkOrder[]>([]);
   const [equipment, setEquipment] = useState<Equipment[]>([]);
   const [requisitionItems, setRequisitionItems] = useState<PartsRequisitionItem[]>([]);
+  const [deliveryTerms, setDeliveryTerms] = useState<DeliveryTerm[]>([]);
   const [loading, setLoading] = useState(true);
 
   const refreshData = async () => {
@@ -46,6 +68,14 @@ export function DataProvider({ children }: { children: ReactNode }) {
 
       if (reqError) console.error('Erro ao carregar parts_requisition_items:', reqError.message);
       else setRequisitionItems(reqData || []);
+
+      const { data: dtData, error: dtError } = await supabase
+        .from('delivery_terms')
+        .select('*')
+        .order('created_at', { ascending: false });
+
+      if (dtError) console.error('Erro ao carregar delivery_terms:', dtError.message);
+      else setDeliveryTerms(dtData || []);
 
     } catch (err: any) {
       console.error('Erro geral ao atualizar dados:', err.message);
@@ -181,18 +211,81 @@ export function DataProvider({ children }: { children: ReactNode }) {
     }
   };
 
+  const saveDeliveryTerm = async (term: DeliveryTerm): Promise<{ success: boolean; error?: string }> => {
+    try {
+      const payload = {
+        client: term.client,
+        address: term.address || '',
+        responsible: term.responsible || '',
+        equipment: term.equipment,
+        model: term.model || '',
+        fabrication_year: term.fabrication_year || '',
+        serial_number: term.serial_number || '',
+        included_accessories: term.included_accessories || '',
+        phone: term.phone || '',
+        delivery_location: term.delivery_location || '',
+        delivery_date: term.delivery_date,
+      };
+
+      let error = null;
+
+      if (term.id) {
+        const { error: updateError } = await supabase
+          .from('delivery_terms')
+          .update(payload)
+          .eq('id', term.id);
+        error = updateError;
+      } else {
+        const { error: insertError } = await supabase
+          .from('delivery_terms')
+          .insert([payload]);
+        error = insertError;
+      }
+
+      if (error) throw error;
+
+      await refreshData();
+      return { success: true };
+    } catch (err: any) {
+      console.error('Erro detalhado ao salvar Delivery Term:', err);
+      const exactMsg = err?.message || JSON.stringify(err);
+      console.error('Mensagem exata do Supabase:', exactMsg);
+      return { success: false, error: exactMsg };
+    }
+  };
+
+  const deleteDeliveryTerm = async (id: string): Promise<{ success: boolean; error?: string }> => {
+    try {
+      const { error } = await supabase
+        .from('delivery_terms')
+        .delete()
+        .eq('id', id);
+
+      if (error) throw error;
+
+      await refreshData();
+      return { success: true };
+    } catch (err: any) {
+      console.error('Erro ao eliminar Delivery Term:', err);
+      return { success: false, error: err.message };
+    }
+  };
+
   return (
     <DataContext.Provider
       value={{
         workOrders,
         equipment,
         requisitionItems,
+        deliveryTerms,
         loading,
         refreshData,
         saveWorkOrder,
         deleteWorkOrder,
         saveEquipment,
         deleteEquipment,
+        saveDeliveryTerm,
+        deleteDeliveryTerm,
       }}
     >
       {children}
