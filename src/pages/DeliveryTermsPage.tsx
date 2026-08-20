@@ -15,12 +15,12 @@ import { formatDate } from '@/lib/constants';
 import { previewPDF } from '@/lib/pdf';
 import { useToast } from '@/hooks/use-toast';
 
-// --- GERADOR EXATO DO MODELO PDF: TERMO DE ENTREGA ---
+// --- EXACT PDF MODEL GENERATOR: EQUIPMENT DELIVERY TERM ---
 export const generateDeliveryTermPDF = (term: DeliveryTerm): jsPDF => {
   const doc = new jsPDF('p', 'mm', 'a4');
   const pageWidth = doc.internal.pageSize.getWidth();
 
-  // Cabeçalho institucional
+  // Institutional Header
   doc.setFont('Helvetica', 'bold');
   doc.setFontSize(14);
   doc.text('CHINANGOL, LDA', 18, 15);
@@ -30,14 +30,14 @@ export const generateDeliveryTermPDF = (term: DeliveryTerm): jsPDF => {
 
   doc.setTextColor(0, 0, 0);
   doc.setFontSize(13);
-  doc.text('TERMO DE ENTREGA DE EQUIPAMENTO', pageWidth / 2, 30, { align: 'center' });
+  doc.text('EQUIPMENT DELIVERY TERM', pageWidth / 2, 30, { align: 'center' });
   
   doc.setFontSize(9);
   doc.setFont('Helvetica', 'normal');
-  doc.text('Informamos que para os devidos fins, o equipamento indicado abaixo foi entregue ao cliente:', 18, 38);
+  doc.text('Please be advised that for all due purposes, the equipment indicated below was delivered to the client:', 18, 38);
 
   let startY = 43;
-  const rowHeight = 7.5; // Altura ideal para dar respiro ao texto nas linhas
+  const rowHeight = 7.5; // Ideal height to give breathing room to text in rows
   
   const drawField = (y: number, label: string, value: string) => {
     doc.setDrawColor(80, 80, 80);
@@ -49,40 +49,40 @@ export const generateDeliveryTermPDF = (term: DeliveryTerm): jsPDF => {
     doc.text(value || '-', 72, y + 5);
   };
 
-  // Bloco 1: Dados do Cliente
-  drawField(startY, 'Cliente', term.client);
-  drawField(startY += rowHeight, 'Morada', term.address);
-  drawField(startY += rowHeight, 'Responsável', term.responsible);
+  // Block 1: Client Data
+  drawField(startY, 'Client', term.client);
+  drawField(startY += rowHeight, 'Address', term.address);
+  drawField(startY += rowHeight, 'Person in Charge', term.responsible);
   
-  // Título do Bloco 2 com espaçamento seguro abaixo da última linha da tabela do cliente
+  // Title for Block 2 with safe spacing below the last line of the client table
   startY += rowHeight + 4;
   doc.setFont('Helvetica', 'bold');
-  doc.text('Dados do Equipamento', pageWidth / 2, startY, { align: 'center' });
+  doc.text('Equipment Details', pageWidth / 2, startY, { align: 'center' });
   
-  // Margem segura antes de iniciar a segunda tabela
+  // Safe margin before starting the second table
   startY += 5;
 
-  // Bloco 2: Dados do Equipamento
-  drawField(startY, 'Equipamento', term.equipment);
-  drawField(startY += rowHeight, 'Modelo', term.model);
-  drawField(startY += rowHeight, 'Ano de Fabrico', term.fabrication_year);
-  drawField(startY += rowHeight, 'Número de Série', term.serial_number);
-  drawField(startY += rowHeight, 'Acessórios Incluídos', term.included_accessories);
-  drawField(startY += rowHeight, 'Telefone', term.phone);
-  drawField(startY += rowHeight, 'Local de Entrega', term.delivery_location);
+  // Block 2: Equipment Data
+  drawField(startY, 'Equipment', term.equipment);
+  drawField(startY += rowHeight, 'Model', term.model);
+  drawField(startY += rowHeight, 'Year of Manufacture', term.fabrication_year);
+  drawField(startY += rowHeight, 'Serial Number', term.serial_number);
+  drawField(startY += rowHeight, 'Included Accessories', term.included_accessories);
+  drawField(startY += rowHeight, 'Phone', term.phone);
+  drawField(startY += rowHeight, 'Delivery Location', term.delivery_location);
 
-  // Observações com margem de segurança para evitar colisão com a tabela acima
+  // Remarks with safety margin to prevent collision with the table above
   startY += rowHeight + 6;
   doc.setFont('Helvetica', 'bold');
   doc.setFontSize(9);
-  doc.text('Observações e Condições de Entrega:', 18, startY);
+  doc.text('Remarks and Delivery Conditions:', 18, startY);
   
   doc.setFont('Helvetica', 'normal');
   doc.setFontSize(8.5);
   const obsLines = [
-    '• O equipamento foi inspecionado, confirmado e aceite pelo cliente em perfeitas condições;',
-    '• O cliente é responsável pelo transporte do equipamento no local de entrega até ao destino final;',
-    '• Após a entrega do equipamento o vendedor ficará livre de todas as despesas, encargos e danos que possam surgir.'
+    '• The equipment was inspected, confirmed, and accepted by the client in perfect working condition;',
+    '• The client is responsible for transporting the equipment from the delivery site to the final destination;',
+    '• Upon delivery of the equipment, the seller shall be released from all expenses, charges, and damages that may arise.'
   ];
   
   startY += 5;
@@ -91,16 +91,16 @@ export const generateDeliveryTermPDF = (term: DeliveryTerm): jsPDF => {
     startY += 5;
   });
 
-  // Secção de Assinaturas reposicionada com espaço folgado
+  // Repositioned Signatures Section with ample space
   startY += 12;
   doc.setFont('Helvetica', 'bold');
-  doc.text('Representante da Chinangol', 45, startY, { align: 'center' });
+  doc.text('Chinangol Representative', 45, startY, { align: 'center' });
   doc.line(20, startY + 15, 75, startY + 15);
-  doc.text(`Data: ${term.delivery_date || '___/___/______'}`, 45, startY + 20, { align: 'center' });
+  doc.text(`Date: ${term.delivery_date || '___/___/______'}`, 45, startY + 20, { align: 'center' });
 
-  doc.text('Cliente / Recebedor', 155, startY, { align: 'center' });
+  doc.text('Client / Recipient', 155, startY, { align: 'center' });
   doc.line(130, startY + 15, 185, startY + 15);
-  doc.text(`Data: ${term.delivery_date || '___/___/______'}`, 155, startY + 20, { align: 'center' });
+  doc.text(`Date: ${term.delivery_date || '___/___/______'}`, 155, startY + 20, { align: 'center' });
 
   return doc;
 };
@@ -126,8 +126,8 @@ export function DeliveryTermsPage() {
   const handleSave = async () => {
     if (!form.client || !form.equipment || !form.delivery_date) {
       toast({ 
-        title: 'Campos obrigatórios em falta', 
-        description: 'Por favor preencha Cliente, Equipamento e Data de Entrega.', 
+        title: 'Required fields missing', 
+        description: 'Please fill in Client, Equipment, and Delivery Date.', 
         variant: 'destructive' 
       });
       return;
@@ -139,20 +139,20 @@ export function DeliveryTermsPage() {
       
       if (!result.success) {
         toast({ 
-          title: 'Erro ao guardar na Base de Dados', 
-          description: result.error || 'Erro desconhecido retornado pelo servidor', 
+          title: 'Error saving to Database', 
+          description: result.error || 'Unknown error returned by server', 
           variant: 'destructive' 
         });
       } else {
-        toast({ title: 'Sucesso!', description: 'Termo de entrega gravado com sucesso.' });
+        toast({ title: 'Success!', description: 'Delivery term saved successfully.' });
         setDialogOpen(false);
         setForm({});
         setEditing(null);
       }
     } catch (err: any) {
       toast({ 
-        title: 'Erro crítico de execução', 
-        description: err.message || 'Ocorreu um erro inesperado.', 
+        title: 'Critical execution error', 
+        description: err.message || 'An unexpected error occurred.', 
         variant: 'destructive' 
       });
     } finally {
@@ -169,35 +169,35 @@ export function DeliveryTermsPage() {
   return (
     <div>
       <PageHeader 
-        title="Termos de Entrega" 
-        description="Gestão de entrega de equipamentos SANY e emissão de termos oficiais"
+        title="Delivery Terms" 
+        description="Management of SANY equipment delivery and issuance of official terms"
         action={
           <Button onClick={() => { setEditing(null); setForm({}); setDialogOpen(true); }}>
-            <Plus className="w-4 h-4 mr-2" /> Novo Termo
+            <Plus className="w-4 h-4 mr-2" /> New Term
           </Button>
         } 
       />
 
-      <FilterBar search={search} onSearchChange={setSearch} searchPlaceholder="Pesquisar por cliente ou equipamento..." />
+      <FilterBar search={search} onSearchChange={setSearch} searchPlaceholder="Search by client or equipment..." />
 
       <Card>
         <CardContent className="p-0">
           <Table>
             <TableHeader>
               <TableRow>
-                <TableHead>Cliente</TableHead>
-                <TableHead>Equipamento</TableHead>
-                <TableHead>Modelo</TableHead>
-                <TableHead>Nº de Série</TableHead>
-                <TableHead>Data</TableHead>
-                <TableHead className="text-right">Ações</TableHead>
+                <TableHead>Client</TableHead>
+                <TableHead>Equipment</TableHead>
+                <TableHead>Model</TableHead>
+                <TableHead>Serial No.</TableHead>
+                <TableHead>Date</TableHead>
+                <TableHead className="text-right">Actions</TableHead>
               </TableRow>
             </TableHeader>
             <TableBody>
               {filtered.length === 0 ? (
                 <TableRow>
                   <TableCell colSpan={6} className="text-center py-8 text-muted-foreground">
-                    Nenhum termo de entrega registado.
+                    No delivery terms registered.
                   </TableCell>
                 </TableRow>
               ) : (
@@ -209,13 +209,13 @@ export function DeliveryTermsPage() {
                     <TableCell>{t.serial_number}</TableCell>
                     <TableCell>{formatDate(t.delivery_date)}</TableCell>
                     <TableCell className="text-right space-x-1">
-                      <Button variant="ghost" size="icon" onClick={() => handleEdit(t)} title="Editar">
+                      <Button variant="ghost" size="icon" onClick={() => handleEdit(t)} title="Edit">
                         <Pencil className="w-4 h-4" />
                       </Button>
-                      <Button variant="ghost" size="icon" onClick={() => previewPDF(generateDeliveryTermPDF(t))} title="Visualizar PDF">
+                      <Button variant="ghost" size="icon" onClick={() => previewPDF(generateDeliveryTermPDF(t))} title="Preview PDF">
                         <Eye className="w-4 h-4" />
                       </Button>
-                      <Button variant="ghost" size="icon" onClick={() => setDeleteId(t.id!)} title="Eliminar">
+                      <Button variant="ghost" size="icon" onClick={() => setDeleteId(t.id!)} title="Delete">
                         <Trash2 className="w-4 h-4 text-destructive" />
                       </Button>
                     </TableCell>
@@ -230,60 +230,60 @@ export function DeliveryTermsPage() {
       <Dialog open={dialogOpen} onOpenChange={setDialogOpen}>
         <DialogContent className="max-w-2xl max-h-[90vh] overflow-y-auto">
           <DialogHeader>
-            <DialogTitle>{editing ? 'Editar Termo de Entrega' : 'Novo Termo de Entrega'}</DialogTitle>
-            <DialogDescription>Preencha todos os dados exigidos pelo modelo oficial SANY/Chinangol.</DialogDescription>
+            <DialogTitle>{editing ? 'Edit Delivery Term' : 'New Delivery Term'}</DialogTitle>
+            <DialogDescription>Fill in all required data according to the official SANY/Chinangol template.</DialogDescription>
           </DialogHeader>
           <div className="grid grid-cols-2 gap-4 py-2">
             <div>
-              <Label>Cliente *</Label>
-              <Input placeholder="Nome do cliente" value={form.client || ''} onChange={e => setForm({...form, client: e.target.value})} />
+              <Label>Client *</Label>
+              <Input placeholder="Client name" value={form.client || ''} onChange={e => setForm({...form, client: e.target.value})} />
             </div>
             <div>
-              <Label>Morada</Label>
-              <Input placeholder="Morada do cliente" value={form.address || ''} onChange={e => setForm({...form, address: e.target.value})} />
+              <Label>Address</Label>
+              <Input placeholder="Client address" value={form.address || ''} onChange={e => setForm({...form, address: e.target.value})} />
             </div>
             <div>
-              <Label>Responsável</Label>
-              <Input placeholder="Nome do responsável" value={form.responsible || ''} onChange={e => setForm({...form, responsible: e.target.value})} />
+              <Label>Person in Charge</Label>
+              <Input placeholder="Name of person in charge" value={form.responsible || ''} onChange={e => setForm({...form, responsible: e.target.value})} />
             </div>
             <div>
-              <Label>Equipamento *</Label>
-              <Input placeholder="Ex: Escavadora SANY" value={form.equipment || ''} onChange={e => setForm({...form, equipment: e.target.value})} />
+              <Label>Equipment *</Label>
+              <Input placeholder="Ex: SANY Excavator" value={form.equipment || ''} onChange={e => setForm({...form, equipment: e.target.value})} />
             </div>
             <div>
-              <Label>Modelo</Label>
+              <Label>Model</Label>
               <Input placeholder="Ex: SY215C" value={form.model || ''} onChange={e => setForm({...form, model: e.target.value})} />
             </div>
             <div>
-              <Label>Ano de Fabrico</Label>
+              <Label>Year of Manufacture</Label>
               <Input placeholder="Ex: 2024" value={form.fabrication_year || ''} onChange={e => setForm({...form, fabrication_year: e.target.value})} />
             </div>
             <div>
-              <Label>Número de Série</Label>
-              <Input placeholder="Nº de série" value={form.serial_number || ''} onChange={e => setForm({...form, serial_number: e.target.value})} />
+              <Label>Serial Number</Label>
+              <Input placeholder="Serial No." value={form.serial_number || ''} onChange={e => setForm({...form, serial_number: e.target.value})} />
             </div>
             <div>
-              <Label>Telefone</Label>
-              <Input placeholder="Contacto telefónico" value={form.phone || ''} onChange={e => setForm({...form, phone: e.target.value})} />
+              <Label>Phone</Label>
+              <Input placeholder="Phone number" value={form.phone || ''} onChange={e => setForm({...form, phone: e.target.value})} />
             </div>
             <div className="col-span-2">
-              <Label>Acessórios Incluídos</Label>
-              <Input placeholder="Ex: Balde standard, manual, kit de ferramentas" value={form.included_accessories || ''} onChange={e => setForm({...form, included_accessories: e.target.value})} />
+              <Label>Included Accessories</Label>
+              <Input placeholder="Ex: Standard bucket, manual, toolkit" value={form.included_accessories || ''} onChange={e => setForm({...form, included_accessories: e.target.value})} />
             </div>
             <div className="col-span-2">
-              <Label>Local de Entrega</Label>
-              <Input placeholder="Local exato de entrega" value={form.delivery_location || ''} onChange={e => setForm({...form, delivery_location: e.target.value})} />
+              <Label>Delivery Location</Label>
+              <Input placeholder="Exact delivery location" value={form.delivery_location || ''} onChange={e => setForm({...form, delivery_location: e.target.value})} />
             </div>
             <div className="col-span-2">
-              <Label>Data de Entrega *</Label>
+              <Label>Delivery Date *</Label>
               <Input type="date" value={form.delivery_date || ''} onChange={e => setForm({...form, delivery_date: e.target.value})} />
             </div>
           </div>
           <DialogFooter>
-            <Button variant="outline" onClick={() => setDialogOpen(false)}>Cancelar</Button>
+            <Button variant="outline" onClick={() => setDialogOpen(false)}>Cancel</Button>
             <Button onClick={handleSave} disabled={loading}>
               {loading && <Loader2 className="w-4 h-4 mr-2 animate-spin" />}
-              Guardar Termo
+              Save Term
             </Button>
           </DialogFooter>
         </DialogContent>
@@ -296,8 +296,8 @@ export function DeliveryTermsPage() {
           if (deleteId) deleteDeliveryTerm(deleteId);
           setDeleteId(null);
         }} 
-        title="Eliminar Termo?" 
-        description="Esta ação não pode ser desfeita e removerá o registo permanentemente." 
+        title="Delete Term?" 
+        description="This action cannot be undone and will permanently remove the record." 
         destructive 
       />
     </div>
