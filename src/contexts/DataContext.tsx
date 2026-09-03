@@ -1,22 +1,56 @@
 import React, { createContext, useContext, useState, useEffect, ReactNode } from 'react';
-import { supabase } from '@/lib/supabase';
-import type { WorkOrder, Equipment, PartsRequisitionItem } from '@/types';
+import { createClient } from '@supabase/supabase-js';
 
-// Interface completa para o Delivery Term
+// Inicialização do cliente Supabase (ajuste com as tuas variáveis de ambiente se necessário)
+const supabaseUrl = import.meta.env.VITE_SUPABASE_URL || '';
+const supabaseAnonKey = import.meta.env.VITE_SUPABASE_ANON_KEY || '';
+export const supabase = createClient(supabaseUrl, supabaseAnonKey);
+
+// Interfaces de Tipos
+export interface WorkOrder {
+  id?: string;
+  [key: string]: any;
+}
+
+export interface Equipment {
+  id?: string;
+  [key: string]: any;
+}
+
+export interface PartsRequisitionItem {
+  id?: string;
+  [key: string]: any;
+}
+
 export interface DeliveryTerm {
   id?: string;
-  client: string;
-  address?: string;
-  responsible?: string;
-  equipment: string;
-  model?: string;
-  fabrication_year?: string;
-  serial_number?: string;
-  included_accessories?: string;
-  phone?: string;
-  delivery_location?: string;
-  chinangol_representative?: string;
-  delivery_date: string;
+  [key: string]: any;
+}
+
+export interface TravelLog {
+  id?: string;
+  number: string;
+  status: string;
+  vehicle_id?: string | null;
+  vehicle_name?: string;
+  license_plate?: string;
+  driver_name: string;
+  origin?: string;
+  destination: string;
+  purpose?: string;
+  departure_date: string;
+  expected_return_time?: string | null;
+  arrival_date?: string;
+  arrival_time?: string | null;
+  start_km?: number;
+  end_km?: number;
+  fuel_start?: string;
+  fuel_end?: string;
+  checklist?: any[];
+  travel_team?: string;
+  mechanic?: string;
+  dispatcher?: string;
+  user_id?: string;
   created_at?: string;
 }
 
@@ -25,6 +59,7 @@ interface DataContextType {
   equipment: Equipment[];
   requisitionItems: PartsRequisitionItem[];
   deliveryTerms: DeliveryTerm[];
+  travelLogs: TravelLog[];
   loading: boolean;
   refreshData: () => Promise<void>;
   saveWorkOrder: (wo: WorkOrder) => Promise<{ success: boolean; error?: string }>;
@@ -33,52 +68,48 @@ interface DataContextType {
   deleteEquipment: (id: string) => Promise<{ success: boolean; error?: string }>;
   saveDeliveryTerm: (term: DeliveryTerm) => Promise<{ success: boolean; error?: string }>;
   deleteDeliveryTerm: (id: string) => Promise<{ success: boolean; error?: string }>;
+  saveTravelLog: (log: Partial<TravelLog>) => Promise<{ success: boolean; error?: string }>;
+  deleteTravelLog: (id: string) => Promise<{ success: boolean; error?: string }>;
 }
 
 const DataContext = createContext<DataContextType | undefined>(undefined);
 
-export function DataProvider({ children }: { children: ReactNode }) {
+export const DataProvider: React.FC<{ children: ReactNode }> = ({ children }) => {
   const [workOrders, setWorkOrders] = useState<WorkOrder[]>([]);
   const [equipment, setEquipment] = useState<Equipment[]>([]);
   const [requisitionItems, setRequisitionItems] = useState<PartsRequisitionItem[]>([]);
   const [deliveryTerms, setDeliveryTerms] = useState<DeliveryTerm[]>([]);
-  const [loading, setLoading] = useState(true);
+  const [travelLogs, setTravelLogs] = useState<TravelLog[]>([]);
+  const [loading, setLoading] = useState<boolean>(true);
 
   const refreshData = async () => {
     setLoading(true);
     try {
-      const { data: woData, error: woError } = await supabase
-        .from('work_orders')
-        .select('*')
-        .order('created_at', { ascending: false });
+      const [woRes, eqRes, reqRes, dtRes, tlRes] = await Promise.all([
+        supabase.from('work_orders').select('*').order('created_at', { ascending: false }),
+        supabase.from('equipment').select('*').order('created_at', { ascending: false }),
+        supabase.from('parts_requisition_items').select('*').order('created_at', { ascending: false }),
+        supabase.from('delivery_terms').select('*').order('created_at', { ascending: false }),
+        supabase.from('travel_logs').select('*').order('created_at', { ascending: false })
+      ]);
 
-      if (woError) console.error('Erro ao carregar work_orders:', woError.message);
-      else setWorkOrders(woData || []);
+      if (woRes.error) console.error('Erro Work Orders:', woRes.error.message);
+      else setWorkOrders(woRes.data || []);
 
-      const { data: eqData, error: eqError } = await supabase
-        .from('equipment')
-        .select('*');
+      if (eqRes.error) console.error('Erro Equipment:', eqRes.error.message);
+      else setEquipment(eqRes.data || []);
 
-      if (eqError) console.error('Erro ao carregar equipment:', eqError.message);
-      else setEquipment(eqData || []);
+      if (reqRes.error) console.error('Erro Requisition Items:', reqRes.error.message);
+      else setRequisitionItems(reqRes.data || []);
 
-      const { data: reqData, error: reqError } = await supabase
-        .from('parts_requisition_items')
-        .select('*');
+      if (dtRes.error) console.error('Erro Delivery Terms:', dtRes.error.message);
+      else setDeliveryTerms(dtRes.data || []);
 
-      if (reqError) console.error('Erro ao carregar parts_requisition_items:', reqError.message);
-      else setRequisitionItems(reqData || []);
+      if (tlRes.error) console.error('Erro Travel Logs:', tlRes.error.message);
+      else setTravelLogs(tlRes.data || []);
 
-      const { data: dtData, error: dtError } = await supabase
-        .from('delivery_terms')
-        .select('*')
-        .order('created_at', { ascending: false });
-
-      if (dtError) console.error('Erro ao carregar delivery_terms:', dtError.message);
-      else setDeliveryTerms(dtData || []);
-
-    } catch (err: any) {
-      console.error('Erro geral ao atualizar dados:', err.message);
+    } catch (err) {
+      console.error('Erro geral ao atualizar dados:', err);
     } finally {
       setLoading(false);
     }
@@ -88,185 +119,134 @@ export function DataProvider({ children }: { children: ReactNode }) {
     refreshData();
   }, []);
 
-  const saveWorkOrder = async (wo: WorkOrder): Promise<{ success: boolean; error?: string }> => {
+  // --- Funções de Work Orders ---
+  const saveWorkOrder = async (wo: WorkOrder) => {
     try {
-      const payload = {
-        number: wo.number,
-        status: wo.status || 'open',
-        entry_date: wo.entry_date || null,
-        equipment_id: wo.equipment_id || null,
-        client_project: wo.client_project || '',
-        serial_chassis: wo.serial_chassis || '',
-        hour_km_actual: wo.hour_km_actual || '',
-        technician_receptionist: wo.technician_receptionist || '',
-        assigned_technician: wo.assigned_technician || '',
-        exit_observations: wo.exit_observations || '',
-        diagnosis_lines: wo.diagnosis_lines || [],
-        entry_checklist: wo.entry_checklist || [],
-        parts_replaced: wo.parts_replaced || [],
-        mechanic_sign: wo.mechanic_sign || '',
-        engineer_sign: wo.engineer_sign || '',
-        client_sign: wo.client_sign || '',
-        updated_at: new Date().toISOString(),
-      };
-
       let error = null;
+      const payload = { ...wo };
+      if (!payload.id) delete payload.id;
 
       if (wo.id) {
-        const { error: updateError } = await supabase
-          .from('work_orders')
-          .update(payload)
-          .eq('id', wo.id);
-        error = updateError;
+        const res = await supabase.from('work_orders').update(payload).eq('id', wo.id);
+        error = res.error;
       } else {
-        const { error: insertError } = await supabase
-          .from('work_orders')
-          .insert([payload]);
-        error = insertError;
+        const res = await supabase.from('work_orders').insert([payload]);
+        error = res.error;
       }
-
       if (error) throw error;
-
       await refreshData();
       return { success: true };
     } catch (err: any) {
-      console.error('Erro ao salvar Work Order:', err);
-      return { success: false, error: err.message || 'Erro desconhecido ao guardar' };
-    }
-  };
-
-  const deleteWorkOrder = async (id: string): Promise<{ success: boolean; error?: string }> => {
-    try {
-      const { error } = await supabase
-        .from('work_orders')
-        .delete()
-        .eq('id', id);
-
-      if (error) throw error;
-
-      await refreshData();
-      return { success: true };
-    } catch (err: any) {
-      console.error('Erro ao eliminar Work Order:', err);
       return { success: false, error: err.message };
     }
   };
 
-  const saveEquipment = async (eq: Partial<Equipment>): Promise<{ success: boolean; error?: string }> => {
+  const deleteWorkOrder = async (id: string) => {
     try {
-      const payload = {
-        name: eq.name,
-        brand: eq.brand || 'SANY',
-        model: eq.model || '',
-        serial_number: eq.serial_number,
-        plate_number: eq.plate_number || '',
-        category: eq.category || 'heavy_machinery',
-        status: eq.status || 'operational',
-        horometer: Number(eq.horometer) || 0,
-        odometer: Number(eq.odometer) || 0,
-        location: eq.location || '',
-        notes: eq.notes || '',
-        updated_at: new Date().toISOString(),
-      };
+      const { error } = await supabase.from('work_orders').delete().eq('id', id);
+      if (error) throw error;
+      await refreshData();
+      return { success: true };
+    } catch (err: any) {
+      return { success: false, error: err.message };
+    }
+  };
 
+  // --- Funções de Equipment ---
+  const saveEquipment = async (eq: Partial<Equipment>) => {
+    try {
       let error = null;
+      const payload = { ...eq };
+      if (!payload.id) delete payload.id;
 
       if (eq.id) {
-        const { error: updateError } = await supabase
-          .from('equipment')
-          .update(payload)
-          .eq('id', eq.id);
-        error = updateError;
+        const res = await supabase.from('equipment').update(payload).eq('id', eq.id);
+        error = res.error;
       } else {
-        const { error: insertError } = await supabase
-          .from('equipment')
-          .insert([payload]);
-        error = insertError;
+        const res = await supabase.from('equipment').insert([payload]);
+        error = res.error;
       }
-
       if (error) throw error;
-
       await refreshData();
       return { success: true };
     } catch (err: any) {
-      console.error('Erro ao salvar Equipment:', err);
-      return { success: false, error: err.message || 'Erro desconhecido ao guardar equipamento' };
-    }
-  };
-
-  const deleteEquipment = async (id: string): Promise<{ success: boolean; error?: string }> => {
-    try {
-      const { error } = await supabase
-        .from('equipment')
-        .delete()
-        .eq('id', id);
-
-      if (error) throw error;
-
-      await refreshData();
-      return { success: true };
-    } catch (err: any) {
-      console.error('Erro ao eliminar Equipment:', err);
       return { success: false, error: err.message };
     }
   };
 
-  const saveDeliveryTerm = async (term: DeliveryTerm): Promise<{ success: boolean; error?: string }> => {
+  const deleteEquipment = async (id: string) => {
     try {
-      const payload = {
-        client: term.client,
-        address: term.address || '',
-        responsible: term.responsible || '',
-        equipment: term.equipment,
-        model: term.model || '',
-        fabrication_year: term.fabrication_year || '',
-        serial_number: term.serial_number || '',
-        included_accessories: term.included_accessories || '',
-        phone: term.phone || '',
-        delivery_location: term.delivery_location || '',
-        delivery_date: term.delivery_date,
-      };
-
-      let error = null;
-
-      if (term.id) {
-        const { error: updateError } = await supabase
-          .from('delivery_terms')
-          .update(payload)
-          .eq('id', term.id);
-        error = updateError;
-      } else {
-        const { error: insertError } = await supabase
-          .from('delivery_terms')
-          .insert([payload]);
-        error = insertError;
-      }
-
+      const { error } = await supabase.from('equipment').delete().eq('id', id);
       if (error) throw error;
-
       await refreshData();
       return { success: true };
     } catch (err: any) {
-      console.error('Erro detalhado ao salvar Delivery Term:', err);
-      const exactMsg = err?.message || JSON.stringify(err);
-      console.error('Mensagem exata do Supabase:', exactMsg);
-      return { success: false, error: exactMsg };
+      return { success: false, error: err.message };
     }
   };
 
-  const deleteDeliveryTerm = async (id: string): Promise<{ success: boolean; error?: string }> => {
+  // --- Funções de Delivery Terms ---
+  const saveDeliveryTerm = async (term: DeliveryTerm) => {
     try {
-      const { error } = await supabase
-        .from('delivery_terms')
-        .delete()
-        .eq('id', id);
+      let error = null;
+      const payload = { ...term };
+      if (!payload.id) delete payload.id;
 
+      if (term.id) {
+        const res = await supabase.from('delivery_terms').update(payload).eq('id', term.id);
+        error = res.error;
+      } else {
+        const res = await supabase.from('delivery_terms').insert([payload]);
+        error = res.error;
+      }
       if (error) throw error;
-
       await refreshData();
       return { success: true };
     } catch (err: any) {
-      console.error('Erro ao eliminar Delivery Term:', err);
+      return { success: false, error: err.message };
+    }
+  };
+
+  const deleteDeliveryTerm = async (id: string) => {
+    try {
+      const { error } = await supabase.from('delivery_terms').delete().eq('id', id);
+      if (error) throw error;
+      await refreshData();
+      return { success: true };
+    } catch (err: any) {
+      return { success: false, error: err.message };
+    }
+  };
+
+  // --- Funções de Travel Logs ---
+  const saveTravelLog = async (log: Partial<TravelLog>) => {
+    try {
+      let error = null;
+      const payload = { ...log };
+      if (!payload.id) delete payload.id;
+
+      if (log.id) {
+        const res = await supabase.from('travel_logs').update(payload).eq('id', log.id);
+        error = res.error;
+      } else {
+        const res = await supabase.from('travel_logs').insert([payload]);
+        error = res.error;
+      }
+      if (error) throw error;
+      await refreshData();
+      return { success: true };
+    } catch (err: any) {
+      return { success: false, error: err.message };
+    }
+  };
+
+  const deleteTravelLog = async (id: string) => {
+    try {
+      const { error } = await supabase.from('travel_logs').delete().eq('id', id);
+      if (error) throw error;
+      await refreshData();
+      return { success: true };
+    } catch (err: any) {
       return { success: false, error: err.message };
     }
   };
@@ -278,6 +258,7 @@ export function DataProvider({ children }: { children: ReactNode }) {
         equipment,
         requisitionItems,
         deliveryTerms,
+        travelLogs,
         loading,
         refreshData,
         saveWorkOrder,
@@ -286,17 +267,19 @@ export function DataProvider({ children }: { children: ReactNode }) {
         deleteEquipment,
         saveDeliveryTerm,
         deleteDeliveryTerm,
+        saveTravelLog,
+        deleteTravelLog,
       }}
     >
       {children}
     </DataContext.Provider>
   );
-}
+};
 
-export function useData() {
+export const useData = () => {
   const context = useContext(DataContext);
   if (!context) {
     throw new Error('useData deve ser usado dentro de um DataProvider');
   }
   return context;
-}
+};
